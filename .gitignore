@@ -1,0 +1,10 @@
+/*
+!/src/
+!/src/*
+!/include/
+!/include/*
+!/README.md
+!/LICENSE
+!/.gitignore
+!/makefile
+/src/prototipos
