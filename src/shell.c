@@ -229,7 +229,7 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
         exit(errno);
     } // Si es interno, se ejecuta el manejador.
     else {
-        ICMD_HANDLER(icmd)(NULL);
+        ICMD_HANDLER(icmd)(p);
         exit(0);
     }
     
