@@ -15,18 +15,21 @@
 #include <unistd.h>
 #include <termios.h>
 
+typedef enum {P_READY, P_RUNNING, P_STOPPED, P_SIGNALED, P_EXITED} ProcState;
+
 struct T_Process {
     char * args[MAX_ARGS + 1];       // +1, por el NULL que indica el fin de la lista.
     int argc;                        // Número de argumentos.
     pid_t pid;                       // PID del proceso.
-    int status;                      // Estado del proceso. (En desuso por ahora)
+    ProcState state;
+    int num_job;
     struct T_Process * next;         // Siguiente proceso.
 };
 
 typedef struct T_Process Process;
-typedef enum {job_ready,job_executed,job_stopped,job_completed, job_signaled} JobState;
+typedef enum {JOB_READY,JOB_EXECUTED,JOB_STOPPED,JOB_COMPLETED, JOB_SIGNALED} JobState;
 
-#define IS_JOB_ENDED(s) ((s) == job_completed || (s) == job_signaled)
+#define IS_JOB_ENDED(s) ((s) == JOB_COMPLETED || (s) == JOB_SIGNALED)
 
 struct T_Job {
     const char * command;             // Comando que inició el trabajo.
@@ -101,6 +104,16 @@ Job * create_job(ListJobs * list_jobs, const char * cmd);
  */
 
 void remove_job(ListJobs * list_jobs, pid_t gpid);
+
+char is_job_n_running(Job * job, int i);
+char is_job_n_stopped(Job * job, int i);
+char is_job_n_completed(Job * job, int i);
+
+#define is_job_running(j)    is_job_n_running((j), -1)
+#define is_job_stopped(j)    is_job_stopped((j), -1)
+#define is_job_completed(j)  is_job_completed((j), -1)
+#define is_job_foreground(j) is_job_running(j) && (j)->foreground
+#define is_job_background(j) is_job_running(j) && !(j)->foreground
 
 /**
  * Esta función analiza el estado pasado como argumento del grupo de procesos 

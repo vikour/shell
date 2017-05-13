@@ -127,7 +127,7 @@ Job * create_job(ListJobs * list_jobs, const char * cmd) {
     (*curr)->command = cmd;
     (*curr)->foreground = 1;
     (*curr)->gpid = 0;
-    (*curr)->status = job_ready;
+    (*curr)->status = JOB_READY;
     (*curr)->info = 0;
     (*curr)->next = NULL;
     (*curr)->cargarModo = 0;
@@ -160,38 +160,83 @@ void remove_job(ListJobs * list_jobs, pid_t gpid) {
     
 }
 
+char is_job_n_running(Job * job, int i) {
+    char running = 0;
+    Process * p = job->proc;
+    
+    while (p && !running) {
+        
+        if (p->num_job == i || i == -1)
+            running = p->state == P_RUNNING;
+        
+        p = p->next;
+    }
+    
+    return running;
+}
+
+char is_job_n_completed(Job * job, int i) {
+    char finish = 1;
+    Process * p = job->proc;
+    
+    while (p && finish) {
+        
+        if (p->num_job == i || i == -1)
+            finish = finish && (p->state == P_EXITED || p->state == P_SIGNALED);
+        
+        p = p->next;
+    }
+    
+    return finish;
+}
+
+char is_job_n_stopped(Job * job, int i) {
+    char stopped = 1;
+    Process * p = job->proc;
+    
+    while (p && stopped) {
+        
+        if (p->num_job == i || i == -1)
+            stopped = stopped && p->state == P_STOPPED;
+        
+        p = p->next;
+    }
+    
+    return stopped;
+}
+
 void next_state(Job * job, int status, char foreground, char exec) {
     
     // Job ejecución foreground:
-    if ( (job->status == job_ready && exec == 1 && job->foreground) ||
-         (job->status == job_stopped && WIFCONTINUED(status) && foreground) ||
-         (job->status == job_executed && !job->foreground && foreground))
+    if ( (job->status == JOB_READY && exec == 1 && job->foreground) ||
+         (job->status == JOB_STOPPED && WIFCONTINUED(status) && foreground) ||
+         (job->status == JOB_EXECUTED && !job->foreground && foreground))
     {
-        job->status = job_executed;
+        job->status = JOB_EXECUTED;
         job->foreground = 1;
     }
     // Job ejecución background
-    else if ( (job->status == job_ready && exec == 1 && !job->foreground) ||
-              (job->status == job_stopped && WIFCONTINUED(status) && !foreground))
+    else if ( (job->status == JOB_READY && exec == 1 && !job->foreground) ||
+              (job->status == JOB_STOPPED && WIFCONTINUED(status) && !foreground))
     {
-        job->status = job_executed;
+        job->status = JOB_EXECUTED;
         job->foreground = 0;
     }
     // Job detenido
-    else if ( (job->status == job_executed && WIFSTOPPED(status))) {
-        job->status = job_stopped;
+    else if ( (job->status == JOB_EXECUTED && WIFSTOPPED(status))) {
+        job->status = JOB_STOPPED;
         job->foreground = 0;
         job->info = WSTOPSIG(status);
     }
     // Job completed
-    else if ( job->status == job_executed && WIFEXITED(status) ) {
-        job->status = job_completed;
+    else if ( job->status == JOB_EXECUTED && WIFEXITED(status) ) {
+        job->status = JOB_COMPLETED;
         job->info = WEXITSTATUS(status);
     }
     // job signaled
-    else if ( (job->status == job_executed || job->status == job_stopped) && WIFSIGNALED(status) ) 
+    else if ( (job->status == JOB_EXECUTED || job->status == JOB_STOPPED) && WIFSIGNALED(status) ) 
     {
-        job->status = job_signaled;
+        job->status = JOB_SIGNALED;
         job->info = WTERMSIG(status);
     }
     
