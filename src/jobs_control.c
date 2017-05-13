@@ -29,6 +29,7 @@ static void prepare_job(Job * job) {
     *proc = (Process *) malloc(sizeof (Process));
     (*proc)->next = NULL;
     (*proc)->argc = 0;
+    (*proc)->state = P_READY;
 
     while (ptr[offset] != '\0' && ptr[offset] != '&' && (*proc)->argc < MAX_LINE_COMMAND) {
         
@@ -39,6 +40,7 @@ static void prepare_job(Job * job) {
             proc = &((*proc)->next);
             *proc = (Process *) malloc(sizeof (Process));
             (*proc)->next = NULL;
+            (*proc)->state = P_READY;
             i = 0;
             ptr++;
             ((*proc)->argc)++;
@@ -175,14 +177,24 @@ char is_job_n_running(Job * job, int i) {
     return running;
 }
 
-char is_job_n_completed(Job * job, int i) {
+char is_job_n_completed(Job * job, int i, char * signaled) {
     char finish = 1;
     Process * p = job->proc;
     
+    if (signaled != NULL)
+        *signaled = 0;
+    
     while (p && finish) {
         
-        if (p->num_job == i || i == -1)
+        if (p->num_job == i || i == -1) {
             finish = finish && (p->state == P_EXITED || p->state == P_SIGNALED);
+            
+            if (p->state == P_SIGNALED && signaled != NULL && !(*signaled) ) {
+                *signaled = 1;
+                job->info = p->info;
+            }
+            
+        }
         
         p = p->next;
     }
@@ -191,18 +203,23 @@ char is_job_n_completed(Job * job, int i) {
 }
 
 char is_job_n_stopped(Job * job, int i) {
-    char stopped = 1;
     Process * p = job->proc;
+    int nRunning = 0;
+    int nStopped = 0;
     
-    while (p && stopped) {
+    while (p ) {
         
-        if (p->num_job == i || i == -1)
-            stopped = stopped && p->state == P_STOPPED;
+        if (p->num_job == i || i == -1) 
+            
+            if (p->state == P_RUNNING)
+                nRunning++;
+            else if (p->state == P_STOPPED)
+                nStopped++;
         
         p = p->next;
     }
     
-    return stopped;
+    return nStopped > 0 && nRunning == 0;
 }
 
 
@@ -246,39 +263,22 @@ void mark_process(Job * job, int status, pid_t pid) {
     
 }
 
-void next_state(Job * job, int status, char foreground, char exec) {
+void analyce_job_status(Job * job) {
+    char signaled;
     
-    // Job ejecución foreground:
-    if ( (job->status == JOB_READY && exec == 1 && job->foreground) ||
-         (job->status == JOB_STOPPED && WIFCONTINUED(status) && foreground) ||
-         (job->status == JOB_EXECUTED && !job->foreground && foreground))
-    {
-        job->status = JOB_EXECUTED;
-        job->foreground = 1;
+    if (is_job_completed(job, &signaled)) {
+        
+        if (signaled) 
+            job->status = JOB_SIGNALED;
+        else
+            job->status = JOB_COMPLETED;
+        
     }
-    // Job ejecución background
-    else if ( (job->status == JOB_READY && exec == 1 && !job->foreground) ||
-              (job->status == JOB_STOPPED && WIFCONTINUED(status) && !foreground))
-    {
-        job->status = JOB_EXECUTED;
-        job->foreground = 0;
-    }
-    // Job detenido
-    else if ( (job->status == JOB_EXECUTED && WIFSTOPPED(status))) {
+    else if (is_job_stopped(job)) {
         job->status = JOB_STOPPED;
-        job->foreground = 0;
-        job->info = WSTOPSIG(status);
     }
-    // Job completed
-    else if ( job->status == JOB_EXECUTED && WIFEXITED(status) ) {
-        job->status = JOB_COMPLETED;
-        job->info = WEXITSTATUS(status);
-    }
-    // job signaled
-    else if ( (job->status == JOB_EXECUTED || job->status == JOB_STOPPED) && WIFSIGNALED(status) ) 
-    {
-        job->status = JOB_SIGNALED;
-        job->info = WTERMSIG(status);
+    else {
+        job->status = JOB_RUNNING;
     }
     
 }

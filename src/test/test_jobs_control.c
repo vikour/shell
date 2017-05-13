@@ -362,7 +362,7 @@ void t_analyce_next_status_1() {
     
     printf("Testing 1 ...");
     analize_next_state(&job, 0, 0, 1);
-    assert(job.status == JOB_EXECUTED );
+    assert(job.status == JOB_RUNNING );
     assert(job.foreground);
     printf("OK!\n");
 }

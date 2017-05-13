@@ -28,7 +28,7 @@ struct T_Process {
 };
 
 typedef struct T_Process Process;
-typedef enum {JOB_READY,JOB_EXECUTED,JOB_STOPPED,JOB_COMPLETED, JOB_SIGNALED} JobState;
+typedef enum {JOB_READY,JOB_RUNNING,JOB_STOPPED,JOB_COMPLETED, JOB_SIGNALED} JobState;
 
 #define IS_JOB_ENDED(s) ((s) == JOB_COMPLETED || (s) == JOB_SIGNALED)
 
@@ -108,11 +108,11 @@ void remove_job(ListJobs * list_jobs, pid_t gpid);
 
 char is_job_n_running(Job * job, int i);
 char is_job_n_stopped(Job * job, int i);
-char is_job_n_completed(Job * job, int i);
+char is_job_n_completed(Job * job, int i, char * signaled);
 
 #define is_job_running(j)    is_job_n_running((j), -1)
-#define is_job_stopped(j)    is_job_stopped((j), -1)
-#define is_job_completed(j)  is_job_completed((j), -1)
+#define is_job_stopped(j)    is_job_n_stopped((j), -1)
+#define is_job_completed(j,s)  is_job_n_completed((j), -1, (s))
 #define is_job_foreground(j) is_job_running(j) && (j)->foreground
 #define is_job_background(j) is_job_running(j) && !(j)->foreground
 
@@ -146,7 +146,7 @@ void mark_process(Job * job, int status, pid_t pid);
  *                    el trabajo esté en READY.
  */
 
-void next_state(Job * job, int status, char foreground, char exec);
+void analyce_job_status(Job * job);
 
 #endif /* JOBS_CONTROL_H */
 

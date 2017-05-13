@@ -40,7 +40,7 @@ void print_job_state(int number, Job * job) {
             printf("%-15s","Detenido");
             break;
 
-        case JOB_EXECUTED:
+        case JOB_RUNNING:
             printf("%-15s","En ejecución");
             break;
 
@@ -69,9 +69,10 @@ void handler_sigchld(int sig) {
         // pid > 0 significa "alguien notificó su estado", si devuelve 0, es que no está
         // el hijo disponible, y -1 si no existe el hijo.
         if (pid > 0) {
-            next_state(j, status, 0, 0);
+            mark_process(j,status,pid);
+            analyce_job_status(j);
             // Se notifica al usuario, si el proceso se detuvo en background
-            j->notify = j->status == JOB_STOPPED && !j->foreground;
+            j->notify = (j->status == JOB_STOPPED || IS_JOB_ENDED(j->status)) && !j->foreground ;
         }
         
         
@@ -141,40 +142,15 @@ void destroy_shell() {
     destroy_list_jobs(&shell.jobs);
 }
 
-void put_job_foreground(Job * job) {
-    int status;
-    
-    // Pospongo las señales del manejador, hasta que este proceso se maneje.
-    block_sigchld();
-    
-    // Si se almacenó el modo en el que el comando se detuvo, se reestablece.
-    if ( job->cargarModo ) {
-        tcsetattr(shell.fdin, TCSADRAIN, &job->tmodes);
-    }
-    
-    if (job->status == JOB_EXECUTED && !job->foreground) {
-        job->foreground = 1;
-        tcsetpgrp(shell.fdin, job->gpid);
-    }
-    
-    // Si el trabajo se paró..
-    if (job->status == JOB_STOPPED) {
-        next_state(job, 0, 1, 0);
-        // Le damos la terminal (Antes del CONT, anterior fallo con cat &)
-        tcsetpgrp(shell.fdin, job->gpid);
-        // Le decimos continuar, si se bloqueó porque no tenía la shell, se la 
-        // damos antes de enviar la señal.
-        kill(-job->gpid, SIGCONT);            
-    }
-    
-    waitpid(- job->gpid, &status, WUNTRACED);
-    next_state(job, status,0,0);
+void report_job_foreground(Job * job) {
+    char signaled;
     
     print_info("Foreground job ... pid : %d, command : %s, ", job->gpid, job->command);
     
     if (job->status == JOB_STOPPED) {
         tcgetattr(shell.fdin, &job->tmodes);
         job->cargarModo = 1;
+        job->foreground = 0;
         print_info("detenido\n");
     }
     else {
@@ -188,7 +164,38 @@ void put_job_foreground(Job * job) {
         
         remove_job(&shell.jobs, job->gpid);
     }
+}
+
+void put_job_foreground(Job * job) {
+    int status;
+    pid_t pid;
     
+    // Pospongo las señales del manejador, hasta que este proceso se maneje.
+    block_sigchld();
+    
+    // Si se almacenó el modo en el que el comando se detuvo, se reestablece.
+    if ( job->cargarModo ) {
+        tcsetattr(shell.fdin, TCSADRAIN, &job->tmodes);
+    }
+    
+    job->foreground = 1;
+    tcsetpgrp(shell.fdin, job->gpid);
+    
+    // Si el trabajo se paró..
+    if ( job->status == JOB_STOPPED) 
+        kill(-job->gpid, SIGCONT);    
+    
+    do {
+        pid = waitpid(- job->gpid, &status, WUNTRACED);
+        
+        if (pid > 0) {
+            mark_process(job, status, pid);
+            analyce_job_status(job);
+        }
+        
+    } while ( job->status == JOB_RUNNING );
+    
+    report_job_foreground(job);
     unblock_sigchld();
     
     tcsetpgrp(shell.fdin, shell.pid);
@@ -198,7 +205,7 @@ void put_job_foreground(Job * job) {
 void put_job_background(Job * job) {
     
     if (job->status == JOB_STOPPED) {
-        job->status = JOB_EXECUTED;
+        job->status = JOB_RUNNING;
         job->foreground = 0;
         kill(- job->gpid, SIGCONT);
     }
@@ -249,13 +256,11 @@ void launch_forked_job(Job * job, int icmd) {
                 job->gpid = p->pid;
             
             setpgid(p->pid, job->gpid);
-            
+            mark_process(job,0,p->pid);
         }
         
         p = p->next;
     }
-    
-    next_state(job,0,job->foreground,1);
     
     if (job->foreground)
         put_job_foreground(job);
