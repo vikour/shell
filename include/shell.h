@@ -32,7 +32,7 @@ typedef struct {
     int count;
     const char ** str_cmd;
     int * fork;
-    void (*handler[])(Job *);
+    void (*handler[])(Process *);
 } InternalCommandInfo;
 
 // Configuración del nómbre del comando, y su cadena asociada.
@@ -42,7 +42,7 @@ typedef struct {
    CMD(cmd_fg,   CMDFG,    0) \
    CMD(cmd_bg,   CMDBG,    0) \
    CMD(cmd_jobs, CMDJOBS,  1) \
-   CMD(cmd_cd,   CMDCD,    1)
+   CMD(cmd_cd,   CMDCD,    0)
 
 // Creación de la enumeración
 enum internal_command_names {
@@ -78,9 +78,11 @@ InternalCommandInfo internalCommands = {
     }
 };
 
-#define LINK_CMD(c,f) internalCommands.handler[(c)] = (f)
-#define ICMD_FORK(c)  internalCommands.fork[(c)]
+#define LINK_CMD(c,f)   internalCommands.handler[(c)] = (f)
+#define ICMD_FORK(c)    internalCommands.fork[(c)]
 #define ICMD_HANDLER(c) internalCommands.handler[(c)]
+#define ICMD_STR(c)     internalCommands.str_cmd[(c)]
+#define ICMD_TOTAL      internalCommands.count
 
 #undef CAT_NOEXPAND
 #undef CAT

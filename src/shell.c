@@ -206,7 +206,7 @@ void put_job_background(Job * job) {
     print_info("Background job ... pid : %d, command : %s\n", job->gpid, job->command);
 }
 
-void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foreground) {
+void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foreground, int icmd) {
     pid_t pid;
     
     pid = getpid();
@@ -222,20 +222,27 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
     signal(SIGCHLD, SIG_DFL);
     control_signals(SIG_DFL);
     
-    execvp(p->args[0], p->args);
-    putchar('\n');
-    print_error("Error comando no enonctrado, commando : %s\n", p->args[0]);
-    exit(errno);
+    if (icmd < 0) { // Si no es un comando interno, se ejecuta el ejecutable.
+        execvp(p->args[0], p->args);
+        putchar('\n');
+        print_error("Error comando no enonctrado, commando : %s\n", p->args[0]);
+        exit(errno);
+    } // Si es interno, se ejecuta el manejador.
+    else {
+        ICMD_HANDLER(icmd)(NULL);
+        exit(0);
+    }
+    
 }
 
-void launch_extern_job(Job * job) {
+void launch_forked_job(Job * job, int icmd) {
     Process * p = job->proc;
     
     while (p) {
         p->pid = fork(); 
         
         if (p->pid == 0) 
-            launch_process(p, shell.fdin, STDOUT_FILENO,job->gpid,job->foreground);
+            launch_process(p, shell.fdin, STDOUT_FILENO,job->gpid,job->foreground, icmd);
         else {
             
             if (job->gpid == 0)
@@ -269,9 +276,9 @@ int indexInternalJob(Job * job) {
     int index = -1;
     int j = 0;
     
-    while (index == -1 && j < internalCommands.count) {
+    while (index == -1 && j < ICMD_TOTAL) {
         
-        if (strcmp(job->proc->args[0],internalCommands.str_cmd[j]) == 0)
+        if (strcmp(job->proc->args[0], ICMD_STR(j)) == 0)
             index = j;
         
         j++;
@@ -289,22 +296,22 @@ void launch_job(Job * job) {
     
     index = indexInternalJob(job);
     
-    if (index >= 0 && internalCommands.handler[index] != NULL) {
+    if (index >= 0 && ICMD_HANDLER(index) && !ICMD_FORK(index)) {
         job->gpid = -1;        
-        internalCommands.handler[index](job);
+        internalCommands.handler[index](job->proc);
         block_sigchld();
         remove_job(&shell.jobs, -1);
         unblock_sigchld();
     }
     else
-        launch_extern_job(job);
+        launch_forked_job(job, index);
     
 }
 
-void cmd_cd_handler(Job * job) {
-    const char * dir = job->proc->args[1];
+void cmd_cd_handler(Process * p) {
+    const char * dir = p->args[1];
     
-    if (job->proc->argc < 2)
+    if (p->argc < 2)
         dir = getenv("HOME");
     
     if ( chdir(dir) == 0) {
@@ -337,14 +344,14 @@ Job * search_process_by_number(int num) {
     return NULL;
 }
 
-Job * check_fg_bg_command_line(Job * job_cmd, const char * cmd) {
+Job * check_fg_bg_command_line(Process * p, const char * cmd) {
     int number;
     Job * job;
     
-    if (job_cmd->proc->argc < 2)  // bucamos el primero.
+    if (p->argc < 2)  // bucamos el primero.
         number = 1;
     else
-        number = atoi(job_cmd->proc->args[1]);
+        number = atoi(p->args[1]);
     
     job = search_process_by_number(number);
     
@@ -358,25 +365,25 @@ Job * check_fg_bg_command_line(Job * job_cmd, const char * cmd) {
     return job;
 }
 
-void cmd_fg_handler(Job * job) {
+void cmd_fg_handler(Process * p) {
     Job * fg_job;
     
-    fg_job = check_fg_bg_command_line(job,internalCommands.str_cmd[cmd_fg]);
+    fg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_fg]);
 
     if (fg_job)
         put_job_foreground(fg_job);
 }
 
-void cmd_bg_handler(Job * job) {
+void cmd_bg_handler(Process * p) {
     Job * bg_job;
     
-    bg_job = check_fg_bg_command_line(job,internalCommands.str_cmd[cmd_bg]);
+    bg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_bg]);
 
     if (bg_job)
         put_job_background(bg_job);
 }
 
-void cmd_jobs_handler(Job * job) {
+void cmd_jobs_handler(Process * p) {
     Job * j = shell.jobs;
     int i = 1;
     
