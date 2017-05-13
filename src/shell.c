@@ -156,10 +156,10 @@ void report_job_foreground(Job * job) {
     else {
         
         if (job->status == JOB_COMPLETED) {
-            print_info("exited : %d\n", job->info);
+            print_info("exited : %d\n", *(job->info));
         }
         else  {
-            print_info("signaled : %d\n", job->info);
+            print_info("signaled : %d\n", *(job->info));
         }
         
         remove_job(&shell.jobs, job->gpid);

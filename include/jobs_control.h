@@ -39,7 +39,7 @@ struct T_Job {
     pid_t gpid;                       // pid del grupo de trabajo.
     char foreground;                  // 1. si está se ejecuta en background.
     int status;                       // estado del proceso.
-    int info;                         // Información acerca del estado.
+    int * info;                       // Información acerca del estado.
     char notify;                      // Indica que se muestre el estado al usuario por cualquier motivo.
     Process * proc;                   // Lista de procesos del trabajo.
     struct T_Job * next;              // Siguiente trabajo.

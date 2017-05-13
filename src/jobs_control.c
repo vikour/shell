@@ -19,6 +19,13 @@ static void allocateAndCopy(char ** dest, const char * orig, int count) {
     *(dest + 1) = NULL;
 }
 
+static void _new_process(Process ** p) {
+    *p = (Process *) malloc(sizeof (Process));
+    (*p)->next = NULL;
+    (*p)->argc = 0;
+    (*p)->state = P_READY;
+}
+
 static void prepare_job(Job * job) {
     int i = 0;
     Process ** proc = &(job->proc);
@@ -26,11 +33,8 @@ static void prepare_job(Job * job) {
     int offset = 0;
     char del = ' ';
 
-    *proc = (Process *) malloc(sizeof (Process));
-    (*proc)->next = NULL;
-    (*proc)->argc = 0;
-    (*proc)->state = P_READY;
-
+    _new_process(proc);
+    
     while (ptr[offset] != '\0' && ptr[offset] != '&' && (*proc)->argc < MAX_LINE_COMMAND) {
         
         // Se procesa el caracter leido.
@@ -38,9 +42,7 @@ static void prepare_job(Job * job) {
             ptr++;
         } else if (*ptr == '|') { // Siguiente proceso...
             proc = &((*proc)->next);
-            *proc = (Process *) malloc(sizeof (Process));
-            (*proc)->next = NULL;
-            (*proc)->state = P_READY;
+            _new_process(proc);
             i = 0;
             ptr++;
             ((*proc)->argc)++;
@@ -75,7 +77,7 @@ static void prepare_job(Job * job) {
     
     // marca el fin del comando.
     (*proc)->args[i] = NULL;
-
+    job->info = &((*proc)->info);
 }
 
 void init_list_jobs(ListJobs * list_jobs) {
@@ -191,7 +193,7 @@ char is_job_n_completed(Job * job, int i, char * signaled) {
             
             if (p->state == P_SIGNALED && signaled != NULL && !(*signaled) ) {
                 *signaled = 1;
-                job->info = p->info;
+                job->info = &(p->info);
             }
             
         }
@@ -223,7 +225,7 @@ char is_job_n_stopped(Job * job, int i) {
 }
 
 
-void next_proc_state(Process * p, int status) {
+static void next_proc_state(Process * p, int status) {
     
     if (p->state == P_READY)
         p->state = P_RUNNING;
@@ -265,13 +267,15 @@ void mark_process(Job * job, int status, pid_t pid) {
 
 void analyce_job_status(Job * job) {
     char signaled;
+    Process * p = job->proc;
     
     if (is_job_completed(job, &signaled)) {
         
         if (signaled) 
             job->status = JOB_SIGNALED;
-        else
+        else {
             job->status = JOB_COMPLETED;
+        }
         
     }
     else if (is_job_stopped(job)) {
