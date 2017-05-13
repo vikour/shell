@@ -22,6 +22,7 @@ struct T_Process {
     int argc;                        // Número de argumentos.
     pid_t pid;                       // PID del proceso.
     ProcState state;
+    int info;
     int num_job;
     struct T_Process * next;         // Siguiente proceso.
 };
@@ -114,6 +115,8 @@ char is_job_n_completed(Job * job, int i);
 #define is_job_completed(j)  is_job_completed((j), -1)
 #define is_job_foreground(j) is_job_running(j) && (j)->foreground
 #define is_job_background(j) is_job_running(j) && !(j)->foreground
+
+void mark_process(Job * job, int status, pid_t pid);
 
 /**
  * Esta función analiza el estado pasado como argumento del grupo de procesos 

@@ -205,6 +205,47 @@ char is_job_n_stopped(Job * job, int i) {
     return stopped;
 }
 
+
+void next_proc_state(Process * p, int status) {
+    
+    if (p->state == P_READY)
+        p->state = P_RUNNING;
+    else if ( (p->state == P_STOPPED && WIFCONTINUED(status)))
+        p->state = P_RUNNING;
+    else if ( (p->state == P_RUNNING && WIFSTOPPED(status))) {
+        p->state = P_STOPPED;
+        p->info = WSTOPSIG(status);
+    }
+    else if ( (p->state == P_STOPPED || p->state == P_RUNNING) &&
+            WIFEXITED(status) ) 
+    {
+        p->state = P_EXITED;
+        p->info = WEXITSTATUS(status);
+    }
+    else if ( (p->state == P_STOPPED || p->state == P_RUNNING) &&
+            WIFSIGNALED(status) ) 
+    {
+        p->state = P_SIGNALED;
+        p->info = WTERMSIG(status);
+    }
+}
+
+void mark_process(Job * job, int status, pid_t pid) {
+    Process * p = job->proc;
+    char founded = 0;
+    
+    while (p && !founded) {
+        
+        if (p->pid == pid) {
+            next_proc_state(p, status);
+            founded = 1;
+        }
+        
+        p = p->next;
+    }
+    
+}
+
 void next_state(Job * job, int status, char foreground, char exec) {
     
     // Job ejecución foreground:
