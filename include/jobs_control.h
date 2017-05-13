@@ -109,11 +109,11 @@ char is_job_n_running(Job * job, int i);
 char is_job_n_stopped(Job * job, int i);
 char is_job_n_completed(Job * job, int i, char * signaled);
 
-#define is_job_running(j)    is_job_n_running((j), -1)
-#define is_job_stopped(j)    is_job_n_stopped((j), -1)
+#define is_job_running(j)      is_job_n_running((j), -1)
+#define is_job_stopped(j)      is_job_n_stopped((j), -1)
 #define is_job_completed(j,s)  is_job_n_completed((j), -1, (s))
-#define is_job_foreground(j) is_job_running(j) && (j)->foreground
-#define is_job_background(j) is_job_running(j) && !(j)->foreground
+#define is_job_foreground(j)   (is_job_running(j) && (j)->foreground)
+#define is_job_background(j)   (is_job_running(j) && !(j)->foreground)
 
 void mark_process(Job * job, int status, pid_t pid);
 

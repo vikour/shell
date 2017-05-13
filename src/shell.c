@@ -411,7 +411,7 @@ void notify_and_clean_jobs() {
     Job * job = shell.jobs;
     int i = 1;
     
-    printf(C_BROWN);
+    printf(C_GREEN);
     while (job) {
         
         if (!job->foreground && IS_JOB_ENDED(job->status)) {
