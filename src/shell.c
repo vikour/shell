@@ -50,7 +50,12 @@ void print_job_state(int number, Job * job) {
 
     }
     
-    printf("\t%s\n", job->command);
+    printf("\t%s ", job->command);
+    
+    if (job->total > 1)
+        printf("{%d}", job->total);
+    
+    putchar('\n');
 }
 
 /**
@@ -63,7 +68,6 @@ void handler_sigchld(int sig) {
     pid_t pid;
     
     while (j) {
-        
         pid = waitpid(- j->gpid, &status, WNOHANG | WUNTRACED | WCONTINUED);
         
         // pid > 0 significa "alguien notificó su estado", si devuelve 0, es que no está
@@ -228,8 +232,9 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
     
     signal(SIGCHLD, SIG_DFL);
     control_signals(SIG_DFL);
-    
-    if (icmd < 0) { // Si no es un comando interno, se ejecuta el ejecutable.
+
+    // Si no es un comando interno, o este no tiene manejador
+    if (icmd < 0 || !ICMD_HANDLER(icmd)) { 
         execvp(p->args[0], p->args);
         putchar('\n');
         print_error("Error comando no enonctrado, commando : %s\n", p->args[0]);
@@ -302,15 +307,67 @@ void launch_job(Job * job) {
     index = indexInternalJob(job);
     
     if (index >= 0 && ICMD_HANDLER(index) && !ICMD_FORK(index)) {
-        job->gpid = -1;        
+        job->gpid = -1;
         internalCommands.handler[index](job->proc);
         block_sigchld();
-        remove_job(&shell.jobs, -1);
+        if (index ==  cmd_rr) remove_job(&shell.jobs, -1);
         unblock_sigchld();
     }
     else
         launch_forked_job(job, index);
     
+}
+
+// ---------------------------------------------------------------------------//
+// -------------------------- COMANDOS INTERNOS-------------------------------//
+// ---------------------------------------------------------------------------//
+
+void cmd_rr_handler(Process * p) {
+    Job * job = search_job_by_process(shell.jobs, p->pid);
+    int num, i;
+    
+    if (p->argc < 3) {
+        print_error("Formato: rr <num> <command>\n");
+        return;
+    }
+    
+    num = atoi(p->args[1]);
+    
+    if (num < 1) {
+        print_error("El número debe ser mayor que 1\n");
+        return;
+    }
+    
+    // Eliminamos del proceso rr y el número.
+    for (i = 0 ; i < p->argc - 1; i++)
+        p->args[i] = p->args[i+2];
+    
+    p->argc -= 2;
+    job->foreground = 0;
+    job->type = RR_JOB;
+    // Duplicamos los trabajos.
+    for (i = 0 ; i < num - 1 ; i++)
+        dup_job_command(job);
+    
+    while (p) {
+        p->pid = fork();
+        
+        if (!p->pid)
+            launch_process(p,shell.fdin,STDOUT_FILENO,job->gpid,job->foreground,-1);
+        // padre.
+        
+        if (job->gpid == -1)
+            job->gpid = p->pid;
+        
+        setpgid(p->pid,job->gpid);
+        mark_process(job,0,p->pid);
+        p = p->next;
+    }
+    
+    analyce_job_status(job);
+    job->active = job->total - 1;
+    print_info("Background job ... pid : %d, command : %s\n", job->gpid,
+               job->command);
 }
 
 void cmd_cd_handler(Process * p) {
@@ -446,7 +503,12 @@ void config_internal_commands() {
     LINK_CMD(cmd_bg, cmd_bg_handler);
     LINK_CMD(cmd_jobs, cmd_jobs_handler);
     LINK_CMD(cmd_exit, cmd_exit_handler);
+    LINK_CMD(cmd_rr, cmd_rr_handler);
 }
+
+// ---------------------------------------------------------------------------//
+// ---------------------------------- MAIN------------------------------------//
+// ---------------------------------------------------------------------------//
 
 int main() {
     char * cmd;

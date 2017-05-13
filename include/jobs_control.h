@@ -29,6 +29,7 @@ struct T_Process {
 
 typedef struct T_Process Process;
 
+typedef enum {NORMAL_JOB,RR_JOB} TypeJob;
 #define IS_JOB_ENDED(s) ((s) == COMPLETED || (s) == SIGNALED)
 
 struct T_Job {
@@ -40,6 +41,9 @@ struct T_Job {
     State status;                       // estado del proceso.
     int * info;                       // Información acerca del estado.
     char notify;                      // Indica que se muestre el estado al usuario por cualquier motivo.
+    int active;
+    int total;
+    TypeJob type;
     Process * proc;                   // Lista de procesos del trabajo.
     struct T_Job * next;              // Siguiente trabajo.
 };
@@ -95,6 +99,7 @@ void destroy_list_jobs(ListJobs * list_jobs);
  */
 
 Job * create_job(ListJobs * list_jobs, const char * cmd);
+void dup_job_command(Job * job);
 
 /**
  * Elimina el trabajo con gpid pasado como argumento; si no existe, no borra nada.
@@ -103,7 +108,9 @@ Job * create_job(ListJobs * list_jobs, const char * cmd);
  * @param gpid       GPID del trabajo que se desea eliminar.
  */
 
-void remove_job(ListJobs * list_jobs, pid_t gpid);
+void remove_job_n(ListJobs * list_jobs, pid_t gpid,int n);
+
+#define remove_job(l,g)   remove_job_n((l),(g),-1)
 
 char is_job_n_running(Job * job, int i);
 char is_job_n_stopped(Job * job, int i);
@@ -116,7 +123,7 @@ char is_job_n_completed(Job * job, int i, char * signaled);
 #define is_job_background(j)   (is_job_running(j) && !(j)->foreground)
 
 void mark_process(Job * job, int status, pid_t pid);
-
+Job * search_job_by_process(ListJobs jobs,pid_t pid);
 void analyce_job_status(Job * job);
 
 #endif /* JOBS_CONTROL_H */

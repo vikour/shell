@@ -84,24 +84,45 @@ void init_list_jobs(ListJobs * list_jobs) {
     *list_jobs = NULL;
 }
 
-void destroy_processes(Job * job) {
-    Process * curr, *prev;
+void destroy_processes(Job * job, int n) {
+    Process * curr, *prev = NULL, *rmNode = NULL;
     char ** arg;
     
     curr = job->proc;
     
     while (curr) {
-        arg = curr->args;
-        prev = curr;
         
-        while(*arg) {
-            free(*arg);
-            arg++;
+        arg = curr->args;
+        
+        if (n == -1 || n == curr->num_job ) {
+            
+            while(*arg) {
+                free(*arg);
+                arg++;
+            }
+            
+            if (prev)
+                prev->next = curr->next;
+            else
+                job->proc = job->proc->next;
+            
+            rmNode = curr;
+        }
+        else 
+            prev = curr;            
+
+        curr = curr->next;
+        
+        if ( rmNode) {
+            free(rmNode);
+            rmNode = NULL;
         }
         
-        curr = curr->next;
-        free(prev);
     }
+    
+    // significa que se ha borrado todos los procesos
+    if ( !prev )
+        job->proc = NULL;
     
 }
 
@@ -111,7 +132,7 @@ void destroy_list_jobs(ListJobs * list_jobs) {
     
     while (curr) {
         prev = curr;
-        destroy_processes(curr);
+        destroy_processes(curr, -1);
         curr = curr->next;
         free(prev);
     }
@@ -136,30 +157,76 @@ Job * create_job(ListJobs * list_jobs, const char * cmd) {
     (*curr)->next = NULL;
     (*curr)->cargarModo = 0;
     (*curr)->notify = 0;
+    (*curr)->total = 1;
+    (*curr)->active = 0;
+    (*curr)->type = NORMAL_JOB;
     prepare_job(*curr);
 
     return *curr;
 }
 
-void remove_job(ListJobs * list_jobs, pid_t gpid) {
-    Job * prev, * curr;
+void remove_job_n(ListJobs * jobs, pid_t gpid, int n) {
+    Job * curr = *jobs, *prev = NULL;
+    Process * p;
     
-    prev = NULL;
-    curr = *list_jobs;
-    
-    while (curr && curr->gpid != gpid) {
+    // Busco el trabajo...
+    while ( curr && curr->gpid != gpid ) {
         prev = curr;
         curr = curr->next;
     }
     
-    if (prev == NULL) 
-        *list_jobs = (*list_jobs)->next;
-    else if (curr)
-        prev->next = curr->next;
+    // lo borro si existe...
+    if ( curr ) {
+        destroy_processes(curr, n);
+        
+        if (curr->proc) // se ha borrado 1.
+            curr->total--;
+        else { // borrado del nodo.
+            
+            if ( !prev )
+                *jobs = (*jobs)->next;
+            else
+                prev->next = curr->next;
+            
+            free(curr);
+            curr = NULL;
+        }
+        
+    }
     
-    if (curr) {
-        destroy_processes(curr);
-        free(curr);
+}
+
+void dup_job_command(Job * job) {
+    Process ** dst = &(job->proc); // Apunta al puntero escritor.
+    Process ** src = &(job->proc); // Apunta al puntero lector.
+    int i;
+    
+    if (*dst) {
+        // vamos al final.
+        while (*dst) 
+            dst = &( (*dst)->next );
+        // Comenzamos a copiar con numero = job->total
+        while (*src && (*src)->num_job == 0) {
+            i = 0;
+            *dst = (Process *) malloc(sizeof(Process));
+            // Copiamos todos los argumentos.
+            while ( (*src)->args[i] ) {
+                (*dst)->args[i] = (char *) malloc(sizeof(char) * strlen((*src)->args[i]));
+                strcpy( (*dst)->args[i], (*src)->args[i]);
+                i++;
+            }
+            (*dst)->args[i] = NULL;
+            (*dst)->argc = (*src)->argc;
+            // Especificamos lo que queda.
+            (*dst)->state = READY; 
+            (*dst)->num_job = job->total;
+            (*dst)->next = NULL;
+            // Cogemos la dirección del siguiente e iteramos.
+            dst = &( (*dst)->next );
+            src = &( (*src)->next );
+        }
+        
+        job->total++;
     }
     
 }
@@ -284,4 +351,26 @@ void analyce_job_status(Job * job) {
         job->status = RUNNING;
     }
     
+}
+
+Job * search_job_by_process(ListJobs jobs, pid_t pid) {
+    Job * j = NULL;
+    Job * curr = jobs;
+    Process * p;
+    
+    while (curr && !j) {
+        p = curr->proc;
+        
+        while (p && !j) {
+            
+            if (p->pid == pid)
+                j = curr;
+            
+            p = p->next;
+        }
+        
+        curr = curr->next;
+    }
+    
+    return j;
 }
