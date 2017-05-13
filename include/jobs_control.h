@@ -15,22 +15,21 @@
 #include <unistd.h>
 #include <termios.h>
 
-typedef enum {P_READY, P_RUNNING, P_STOPPED, P_SIGNALED, P_EXITED} ProcState;
+typedef enum {READY,RUNNING,STOPPED,SIGNALED,COMPLETED} State;
 
 struct T_Process {
     char * args[MAX_ARGS + 1];       // +1, por el NULL que indica el fin de la lista.
     int argc;                        // Número de argumentos.
     pid_t pid;                       // PID del proceso.
-    ProcState state;
+    State state;
     int info;
     int num_job;
     struct T_Process * next;         // Siguiente proceso.
 };
 
 typedef struct T_Process Process;
-typedef enum {JOB_READY,JOB_RUNNING,JOB_STOPPED,JOB_COMPLETED, JOB_SIGNALED} JobState;
 
-#define IS_JOB_ENDED(s) ((s) == JOB_COMPLETED || (s) == JOB_SIGNALED)
+#define IS_JOB_ENDED(s) ((s) == COMPLETED || (s) == SIGNALED)
 
 struct T_Job {
     const char * command;             // Comando que inició el trabajo.
@@ -38,7 +37,7 @@ struct T_Job {
     char cargarModo;                  // Indica si se tiene que cargar el modo de la terminal al iniciar de nuevo.
     pid_t gpid;                       // pid del grupo de trabajo.
     char foreground;                  // 1. si está se ejecuta en background.
-    int status;                       // estado del proceso.
+    State status;                       // estado del proceso.
     int * info;                       // Información acerca del estado.
     char notify;                      // Indica que se muestre el estado al usuario por cualquier motivo.
     Process * proc;                   // Lista de procesos del trabajo.
@@ -117,34 +116,6 @@ char is_job_n_completed(Job * job, int i, char * signaled);
 #define is_job_background(j) is_job_running(j) && !(j)->foreground
 
 void mark_process(Job * job, int status, pid_t pid);
-
-/**
- * Esta función analiza el estado pasado como argumento del grupo de procesos 
- * (obtenida con waitpid o alguna similar), para ver a qué estado siguiente 
- * tomará el trabajo pasado como argumento.
- * 
- * Las transiciones son:
- * - Ready -> Ejecución foreground  (exec = 1)  \ Se decide por el job->foreground
- * - Ready -> Ejecución background  (exec = 1)  /
- * - Ejecución foreground -> Detenido (por SIGSTOP o SIGTSTP)
- * - Ejecución foreground -> Completado (Por SIGEXITED)
- * - Ejecución foreground -> Signaled (Por cualquier señal de terminación)
- * - Ejecución foreground -> Ejecución bakground (FG)
- * - Ejecución background -> Detenido (por SIGSTOP)
- * - Ejecución background -> Completado (Por SIGEXITED)
- * - Ejecución background -> Signaled (Por cualquier señal de terminación)
- * - Detenido -> Ejecución foreground (Por SIGCONTINUE y foreground = 1)
- * - Detenido -> Ejecución background (Por SIGCONTINUE y foreground = 0)
- * - Detenido -> Signaled (Por cualquier señal de finalización)
- * 
- * En cualquier otro caso, no se modificará el estado del trabajo.
- * 
- * @param job         Dirección del trabajo.
- * @param status      Estado de la señal obtenida según waitpid o similar.
- * @param foreground  Si en el siguiente estado estará en foreground o no.
- * @param exec        Si se ha pasado ha ejecución, solo afecta en el caso de que
- *                    el trabajo esté en READY.
- */
 
 void analyce_job_status(Job * job);
 

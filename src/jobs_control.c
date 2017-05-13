@@ -23,7 +23,7 @@ static void _new_process(Process ** p) {
     *p = (Process *) malloc(sizeof (Process));
     (*p)->next = NULL;
     (*p)->argc = 0;
-    (*p)->state = P_READY;
+    (*p)->state = READY;
 }
 
 static void prepare_job(Job * job) {
@@ -131,7 +131,7 @@ Job * create_job(ListJobs * list_jobs, const char * cmd) {
     (*curr)->command = cmd;
     (*curr)->foreground = 1;
     (*curr)->gpid = 0;
-    (*curr)->status = JOB_READY;
+    (*curr)->status = READY;
     (*curr)->info = 0;
     (*curr)->next = NULL;
     (*curr)->cargarModo = 0;
@@ -171,7 +171,7 @@ char is_job_n_running(Job * job, int i) {
     while (p && !running) {
         
         if (p->num_job == i || i == -1)
-            running = p->state == P_RUNNING;
+            running = p->state == RUNNING;
         
         p = p->next;
     }
@@ -189,9 +189,9 @@ char is_job_n_completed(Job * job, int i, char * signaled) {
     while (p && finish) {
         
         if (p->num_job == i || i == -1) {
-            finish = finish && (p->state == P_EXITED || p->state == P_SIGNALED);
+            finish = finish && (p->state == COMPLETED || p->state == SIGNALED);
             
-            if (p->state == P_SIGNALED && signaled != NULL && !(*signaled) ) {
+            if (p->state == SIGNALED && signaled != NULL && !(*signaled) ) {
                 *signaled = 1;
                 job->info = &(p->info);
             }
@@ -213,9 +213,9 @@ char is_job_n_stopped(Job * job, int i) {
         
         if (p->num_job == i || i == -1) 
             
-            if (p->state == P_RUNNING)
+            if (p->state == RUNNING)
                 nRunning++;
-            else if (p->state == P_STOPPED)
+            else if (p->state == STOPPED)
                 nStopped++;
         
         p = p->next;
@@ -227,24 +227,24 @@ char is_job_n_stopped(Job * job, int i) {
 
 static void next_proc_state(Process * p, int status) {
     
-    if (p->state == P_READY)
-        p->state = P_RUNNING;
-    else if ( (p->state == P_STOPPED && WIFCONTINUED(status)))
-        p->state = P_RUNNING;
-    else if ( (p->state == P_RUNNING && WIFSTOPPED(status))) {
-        p->state = P_STOPPED;
+    if (p->state == READY)
+        p->state = RUNNING;
+    else if ( (p->state == STOPPED && WIFCONTINUED(status)))
+        p->state = RUNNING;
+    else if ( (p->state == RUNNING && WIFSTOPPED(status))) {
+        p->state = STOPPED;
         p->info = WSTOPSIG(status);
     }
-    else if ( (p->state == P_STOPPED || p->state == P_RUNNING) &&
+    else if ( (p->state == STOPPED || p->state == RUNNING) &&
             WIFEXITED(status) ) 
     {
-        p->state = P_EXITED;
+        p->state = COMPLETED;
         p->info = WEXITSTATUS(status);
     }
-    else if ( (p->state == P_STOPPED || p->state == P_RUNNING) &&
+    else if ( (p->state == STOPPED || p->state == RUNNING) &&
             WIFSIGNALED(status) ) 
     {
-        p->state = P_SIGNALED;
+        p->state = SIGNALED;
         p->info = WTERMSIG(status);
     }
 }
@@ -272,17 +272,16 @@ void analyce_job_status(Job * job) {
     if (is_job_completed(job, &signaled)) {
         
         if (signaled) 
-            job->status = JOB_SIGNALED;
-        else {
-            job->status = JOB_COMPLETED;
-        }
+            job->status = SIGNALED;
+        else 
+            job->status = COMPLETED;
         
     }
     else if (is_job_stopped(job)) {
-        job->status = JOB_STOPPED;
+        job->status = STOPPED;
     }
     else {
-        job->status = JOB_RUNNING;
+        job->status = RUNNING;
     }
     
 }

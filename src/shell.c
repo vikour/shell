@@ -32,19 +32,19 @@ void print_job_state(int number, Job * job) {
 
     switch (job->status) {
 
-        case JOB_COMPLETED:
+        case COMPLETED:
             printf("%-15s","Hecho");
             break;
 
-        case JOB_STOPPED:
+        case STOPPED:
             printf("%-15s","Detenido");
             break;
 
-        case JOB_RUNNING:
+        case RUNNING:
             printf("%-15s","En ejecución");
             break;
 
-        case JOB_SIGNALED:
+        case SIGNALED:
             printf("%-15s","Signaled");
             break;
 
@@ -72,7 +72,7 @@ void handler_sigchld(int sig) {
             mark_process(j,status,pid);
             analyce_job_status(j);
             // Se notifica al usuario, si el proceso se detuvo en background
-            j->notify = (j->status == JOB_STOPPED || IS_JOB_ENDED(j->status)) && !j->foreground ;
+            j->notify = (j->status == STOPPED || IS_JOB_ENDED(j->status)) && !j->foreground ;
         }
         
         
@@ -147,7 +147,7 @@ void report_job_foreground(Job * job) {
     
     print_info("Foreground job ... pid : %d, command : %s, ", job->gpid, job->command);
     
-    if (job->status == JOB_STOPPED) {
+    if (job->status == STOPPED) {
         tcgetattr(shell.fdin, &job->tmodes);
         job->cargarModo = 1;
         job->foreground = 0;
@@ -155,7 +155,7 @@ void report_job_foreground(Job * job) {
     }
     else {
         
-        if (job->status == JOB_COMPLETED) {
+        if (job->status == COMPLETED) {
             print_info("exited : %d\n", *(job->info));
         }
         else  {
@@ -182,7 +182,7 @@ void put_job_foreground(Job * job) {
     tcsetpgrp(shell.fdin, job->gpid);
     
     // Si el trabajo se paró..
-    if ( job->status == JOB_STOPPED) 
+    if ( job->status == STOPPED) 
         kill(-job->gpid, SIGCONT);    
     
     do {
@@ -193,7 +193,7 @@ void put_job_foreground(Job * job) {
             analyce_job_status(job);
         }
         
-    } while ( job->status == JOB_RUNNING );
+    } while ( job->status == RUNNING );
     
     report_job_foreground(job);
     unblock_sigchld();
@@ -204,8 +204,8 @@ void put_job_foreground(Job * job) {
 
 void put_job_background(Job * job) {
     
-    if (job->status == JOB_STOPPED) {
-        job->status = JOB_RUNNING;
+    if (job->status == STOPPED) {
+        job->status = RUNNING;
         job->foreground = 0;
         kill(- job->gpid, SIGCONT);
     }
