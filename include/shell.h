@@ -31,20 +31,22 @@ typedef struct T_Shell Shell;
 typedef struct {
     int count;
     const char ** str_cmd;
+    int * fork;
     void (*handler[])(Job *);
 } InternalCommandInfo;
 
 // Configuración del nómbre del comando, y su cadena asociada.
+// CMD(enum_name, str_name, 1 if forked)
 #define INTERNAL_COMMAND  \
-   CMD(cmd_exit, CMDEXIT) \
-   CMD(cmd_fg,   CMDFG)   \
-   CMD(cmd_bg,   CMDBG)   \
-   CMD(cmd_jobs, CMDJOBS) \
-   CMD(cmd_cd,   CMDCD)
+   CMD(cmd_exit, CMDEXIT,  0) \
+   CMD(cmd_fg,   CMDFG,    0) \
+   CMD(cmd_bg,   CMDBG,    0) \
+   CMD(cmd_jobs, CMDJOBS,  1) \
+   CMD(cmd_cd,   CMDCD,    1)
 
 // Creación de la enumeración
 enum internal_command_names {
-    #define CMD(c,s) c,
+    #define CMD(c,s,f) c,
     INTERNAL_COMMAND
     #undef CMD
 };
@@ -55,23 +57,30 @@ enum internal_command_names {
 
 InternalCommandInfo internalCommands = {
     .count = (
-        #define CMD(c,s) 1 +
+        #define CMD(c,s,f) 1 +
         INTERNAL_COMMAND
         #undef CMD
     0),
     .handler = {
-        #define CMD(c,s) NULL,
+        #define CMD(c,s,f) NULL,
         INTERNAL_COMMAND
         #undef CMD
     },
     .str_cmd = (const char *[]) {
-        #define CMD(c,s) CAT(s),
+        #define CMD(c,s,f) CAT(s),
+        INTERNAL_COMMAND
+        #undef CMD
+    },
+    .fork = (int []) {
+        #define CMD(c,s,f) (f),
         INTERNAL_COMMAND
         #undef CMD
     }
 };
 
 #define LINK_CMD(c,f) internalCommands.handler[(c)] = (f)
+#define ICMD_FORK(c)  internalCommands.fork[(c)]
+#define ICMD_HANDLER(c) internalCommands.handler[(c)]
 
 #undef CAT_NOEXPAND
 #undef CAT
