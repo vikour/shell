@@ -53,33 +53,58 @@ void print_job_state(int number, Job * job) {
     printf("\t%s ", job->command);
     
     if (job->total > 1)
-        printf("{%d}", job->total);
+        printf("{*%d}", job->total);
     
     putchar('\n');
+}
+
+/**
+ * Elimina todos los trabajos internos de un grupo de trabajos que ya han terminado.
+ * 
+ * @param j  Trabajo del que se quieren eliminar los trabajos.
+ */
+
+void cleanInnerJobs(Job * j) {
+    int total, i;
+    total = j->total;
+    // Actualizamos los trabajos internos si hay más de uno.
+    for (i = 0; i < j->total && j->total > 1; i++)
+
+        if (is_job_n_completed(j, i, NULL))
+            remove_job_n(&shell.jobs, j->gpid, i);
+
+    if (total != j->total)
+        reenumerate_job(j);
 }
 
 /**
  * El manejador de SIGCHLD actualiza la lista de trabajos.
  */
 
-void handler_sigchld(int sig) {
+void updateJobs(int sig) {
     Job * j = shell.jobs;
-    int status;
+    int status, total, i;
     pid_t pid;
-    
+    Process * p;
+
     while (j) {
-        pid = waitpid(- j->gpid, &status, WNOHANG | WUNTRACED | WCONTINUED);
+        p = j->proc;
         
-        // pid > 0 significa "alguien notificó su estado", si devuelve 0, es que no está
-        // el hijo disponible, y -1 si no existe el hijo.
-        if (pid > 0) {
-            mark_process(j,status,pid);
-            analyce_job_status(j);
-            // Se notifica al usuario, si el proceso se detuvo en background
-            j->notify = (j->status == STOPPED || IS_JOB_ENDED(j->status)) && !j->foreground ;
+        while (p) {
+
+            pid = waitpid(p->pid, &status, WNOHANG | WUNTRACED | WCONTINUED);
+            
+            if (pid > 0) 
+                mark_process(j, status, pid);
+            
+            p = p->next;
         }
         
+        if (j->total > 1)
+            cleanInnerJobs(j);
         
+        analyce_job_status(j);
+        j->notify = (j->status == STOPPED || IS_JOB_ENDED(j->status)) && !j->foreground;
         j = j->next;
         
     }
@@ -138,7 +163,7 @@ void init_shell() {
     control_signals(SIG_IGN);
     
     // Manejamos la señal SIGCHLD
-    signal(SIGCHLD, handler_sigchld);
+    signal(SIGCHLD, updateJobs);
 }
 
 void destroy_shell() {
@@ -365,7 +390,7 @@ void cmd_rr_handler(Process * p) {
     }
     
     analyce_job_status(job);
-    job->active = job->total - 1;
+    //job->activo = job->total - 1;
     print_info("Background job ... pid : %d, command : %s\n", job->gpid,
                job->command);
 }

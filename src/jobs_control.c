@@ -196,6 +196,27 @@ void remove_job_n(ListJobs * jobs, pid_t gpid, int n) {
     
 }
 
+void reenumerate_job(Job * job) {
+    Process * p = job->proc, * prev = NULL;
+    int num = 0, anterior;
+    
+    if (!job->proc)
+        return;
+    
+    anterior = p->num_job;
+    while (p) {
+        
+        if (anterior != p->num_job) {
+            anterior = p->num_job;
+            num++;
+        }
+        
+        p->num_job = num;
+        p = p->next;
+    }
+    
+}
+
 void dup_job_command(Job * job) {
     Process ** dst = &(job->proc); // Apunta al puntero escritor.
     Process ** src = &(job->proc); // Apunta al puntero lector.
@@ -290,7 +311,6 @@ char is_job_n_stopped(Job * job, int i) {
     
     return nStopped > 0 && nRunning == 0;
 }
-
 
 static void next_proc_state(Process * p, int status) {
     

@@ -109,6 +109,7 @@ void dup_job_command(Job * job);
  */
 
 void remove_job_n(ListJobs * list_jobs, pid_t gpid,int n);
+void reenumerate_job(Job * job);
 
 #define remove_job(l,g)   remove_job_n((l),(g),-1)
 
