@@ -126,6 +126,7 @@ char is_job_n_completed(Job * job, int i, char * signaled);
 void mark_process(Job * job, int status, pid_t pid);
 Job * search_job_by_process(ListJobs jobs,pid_t pid);
 void analyce_job_status(Job * job);
+void kill_job(Job * job, int n, int sig);
 
 #endif /* JOBS_CONTROL_H */
 

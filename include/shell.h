@@ -22,6 +22,7 @@ struct T_Shell {
   pid_t pid;
   History hist;
   ListJobs jobs;
+  char sigalarm_on;
   struct termios mode;
 } shell;
 

@@ -394,3 +394,16 @@ Job * search_job_by_process(ListJobs jobs, pid_t pid) {
     
     return j;
 }
+
+void kill_job(Job * job, int n, int sig) {
+    Process * p = job->proc;
+    
+    while (p) {
+        
+        if (p->num_job == n)
+            kill(p->pid, sig);
+        
+        p = p->next;
+    }
+    
+}

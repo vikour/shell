@@ -77,6 +77,39 @@ void cleanInnerJobs(Job * j) {
         reenumerate_job(j);
 }
 
+void roundRobin(int sig) {
+    Job * j = shell.jobs;
+    int current, next, updated = 0;
+    
+    while (j) {
+        
+        if (j->type == RR_JOB) 
+            
+            if (j->total > 1) {
+                current = j->active;
+                next = (current + 1) % j->total;
+                j->active = next;
+                kill_job(j,current,SIGSTOP);
+                kill_job(j,next,SIGCONT);
+                updated++;
+            }
+            // Si sólo hay uno, puede que esté parado, porque no le tocaba. Así
+            // que lo pongo en marcha. Esto puede suceder, cuando se killall al
+            // comando round robin, y el último está parado, pero tiene planificada
+            // la señal de terminar.
+            else
+                kill(-j->gpid, SIGCONT);
+
+        
+        j = j->next;
+    }
+    
+    if (updated)
+        alarm(1);
+    else
+        shell.sigalarm_on = 0;
+}
+
 /**
  * El manejador de SIGCHLD actualiza la lista de trabajos.
  */
@@ -161,6 +194,10 @@ void init_shell() {
     
     // Ignoramos todo.
     control_signals(SIG_IGN);
+    
+    // Manejamos la señal de SIGALARM.    
+    signal(SIGALRM, roundRobin);
+    shell.sigalarm_on = 0;
     
     // Manejamos la señal SIGCHLD
     signal(SIGCHLD, updateJobs);
@@ -389,10 +426,17 @@ void cmd_rr_handler(Process * p) {
         p = p->next;
     }
     
+    kill(-job->gpid, SIGSTOP);
+    kill_job(job, 0, SIGCONT);
     analyce_job_status(job);
     //job->activo = job->total - 1;
     print_info("Background job ... pid : %d, command : %s\n", job->gpid,
                job->command);
+    
+    if (!shell.sigalarm_on) {
+        alarm(1);
+        shell.sigalarm_on = 1;
+    }
 }
 
 void cmd_cd_handler(Process * p) {
@@ -458,7 +502,12 @@ void cmd_fg_handler(Process * p) {
     fg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_fg]);
 
     if (fg_job)
-        put_job_foreground(fg_job);
+        
+        if (fg_job->type == NORMAL_JOB)
+            put_job_foreground(fg_job);
+        else 
+            printf("Un trabajo round robin, no se puede traer a foreground.\n");
+    
 }
 
 void cmd_bg_handler(Process * p) {
@@ -467,7 +516,11 @@ void cmd_bg_handler(Process * p) {
     bg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_bg]);
 
     if (bg_job)
-        put_job_background(bg_job);
+        
+        if (bg_job->status != RUNNING)
+            put_job_background(bg_job);
+        else
+            printf("El trabajo ya está en ejecución.\n");
 }
 
 void cmd_jobs_handler(Process * p) {
