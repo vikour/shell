@@ -357,12 +357,12 @@ void t_linked_list_job() {
 void t_analyce_next_status_1() {
     Job job;
     
-    job.status = job_ready;
+    job.status = READY;
     job.foreground = 1;
     
     printf("Testing 1 ...");
     analize_next_state(&job, 0, 0, 1);
-    assert(job.status == job_executed );
+    assert(job.status == RUNNING );
     assert(job.foreground);
     printf("OK!\n");
 }

@@ -15,18 +15,22 @@
 #include <unistd.h>
 #include <termios.h>
 
+typedef enum {READY,RUNNING,STOPPED,SIGNALED,COMPLETED} State;
+
 struct T_Process {
     char * args[MAX_ARGS + 1];       // +1, por el NULL que indica el fin de la lista.
     int argc;                        // Número de argumentos.
     pid_t pid;                       // PID del proceso.
-    int status;                      // Estado del proceso. (En desuso por ahora)
+    State state;
+    int info;
+    int num_job;
     struct T_Process * next;         // Siguiente proceso.
 };
 
 typedef struct T_Process Process;
-typedef enum {job_ready,job_executed,job_stopped,job_completed, job_signaled} JobState;
 
-#define IS_JOB_ENDED(s) ((s) == job_completed || (s) == job_signaled)
+typedef enum {NORMAL_JOB,RR_JOB} TypeJob;
+#define IS_JOB_ENDED(s) ((s) == COMPLETED || (s) == SIGNALED)
 
 struct T_Job {
     const char * command;             // Comando que inició el trabajo.
@@ -34,9 +38,12 @@ struct T_Job {
     char cargarModo;                  // Indica si se tiene que cargar el modo de la terminal al iniciar de nuevo.
     pid_t gpid;                       // pid del grupo de trabajo.
     char foreground;                  // 1. si está se ejecuta en background.
-    int status;                       // estado del proceso.
-    int info;                         // Información acerca del estado.
+    State status;                       // estado del proceso.
+    int * info;                       // Información acerca del estado.
     char notify;                      // Indica que se muestre el estado al usuario por cualquier motivo.
+    int active;
+    int total;
+    TypeJob type;
     Process * proc;                   // Lista de procesos del trabajo.
     struct T_Job * next;              // Siguiente trabajo.
 };
@@ -92,6 +99,7 @@ void destroy_list_jobs(ListJobs * list_jobs);
  */
 
 Job * create_job(ListJobs * list_jobs, const char * cmd);
+void dup_job_command(Job * job);
 
 /**
  * Elimina el trabajo con gpid pasado como argumento; si no existe, no borra nada.
@@ -100,37 +108,25 @@ Job * create_job(ListJobs * list_jobs, const char * cmd);
  * @param gpid       GPID del trabajo que se desea eliminar.
  */
 
-void remove_job(ListJobs * list_jobs, pid_t gpid);
+void remove_job_n(ListJobs * list_jobs, pid_t gpid,int n);
+void reenumerate_job(Job * job);
 
-/**
- * Esta función analiza el estado pasado como argumento del grupo de procesos 
- * (obtenida con waitpid o alguna similar), para ver a qué estado siguiente 
- * tomará el trabajo pasado como argumento.
- * 
- * Las transiciones son:
- * - Ready -> Ejecución foreground  (exec = 1)  \ Se decide por el job->foreground
- * - Ready -> Ejecución background  (exec = 1)  /
- * - Ejecución foreground -> Detenido (por SIGSTOP o SIGTSTP)
- * - Ejecución foreground -> Completado (Por SIGEXITED)
- * - Ejecución foreground -> Signaled (Por cualquier señal de terminación)
- * - Ejecución foreground -> Ejecución bakground (FG)
- * - Ejecución background -> Detenido (por SIGSTOP)
- * - Ejecución background -> Completado (Por SIGEXITED)
- * - Ejecución background -> Signaled (Por cualquier señal de terminación)
- * - Detenido -> Ejecución foreground (Por SIGCONTINUE y foreground = 1)
- * - Detenido -> Ejecución background (Por SIGCONTINUE y foreground = 0)
- * - Detenido -> Signaled (Por cualquier señal de finalización)
- * 
- * En cualquier otro caso, no se modificará el estado del trabajo.
- * 
- * @param job         Dirección del trabajo.
- * @param status      Estado de la señal obtenida según waitpid o similar.
- * @param foreground  Si en el siguiente estado estará en foreground o no.
- * @param exec        Si se ha pasado ha ejecución, solo afecta en el caso de que
- *                    el trabajo esté en READY.
- */
+#define remove_job(l,g)   remove_job_n((l),(g),-1)
 
-void next_state(Job * job, int status, char foreground, char exec);
+char is_job_n_running(Job * job, int i);
+char is_job_n_stopped(Job * job, int i);
+char is_job_n_completed(Job * job, int i, char * signaled);
+
+#define is_job_running(j)      is_job_n_running((j), -1)
+#define is_job_stopped(j)      is_job_n_stopped((j), -1)
+#define is_job_completed(j,s)  is_job_n_completed((j), -1, (s))
+#define is_job_foreground(j)   (is_job_running(j) && (j)->foreground)
+#define is_job_background(j)   (is_job_running(j) && !(j)->foreground)
+
+void mark_process(Job * job, int status, pid_t pid);
+Job * search_job_by_process(ListJobs jobs,pid_t pid);
+void analyce_job_status(Job * job);
+void kill_job(Job * job, int n, int sig);
 
 #endif /* JOBS_CONTROL_H */
 

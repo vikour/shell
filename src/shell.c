@@ -32,49 +32,112 @@ void print_job_state(int number, Job * job) {
 
     switch (job->status) {
 
-        case job_completed:
+        case COMPLETED:
             printf("%-15s","Hecho");
             break;
 
-        case job_stopped:
+        case STOPPED:
             printf("%-15s","Detenido");
             break;
 
-        case job_executed:
+        case RUNNING:
             printf("%-15s","En ejecución");
             break;
 
-        case job_signaled:
+        case SIGNALED:
             printf("%-15s","Signaled");
             break;
 
     }
     
-    printf("\t%s\n", job->command);
+    printf("\t%s ", job->command);
+    
+    if (job->total > 1)
+        printf("{*%d}", job->total);
+    
+    putchar('\n');
+}
+
+/**
+ * Elimina todos los trabajos internos de un grupo de trabajos que ya han terminado.
+ * 
+ * @param j  Trabajo del que se quieren eliminar los trabajos.
+ */
+
+void cleanInnerJobs(Job * j) {
+    int total, i;
+    total = j->total;
+    // Actualizamos los trabajos internos si hay más de uno.
+    for (i = 0; i < j->total && j->total > 1; i++)
+
+        if (is_job_n_completed(j, i, NULL))
+            remove_job_n(&shell.jobs, j->gpid, i);
+
+    if (total != j->total)
+        reenumerate_job(j);
+}
+
+void roundRobin(int sig) {
+    Job * j = shell.jobs;
+    int current, next, updated = 0;
+    
+    while (j) {
+        
+        if (j->type == RR_JOB) 
+            
+            if (j->total > 1) {
+                current = j->active;
+                next = (current + 1) % j->total;
+                j->active = next;
+                kill_job(j,current,SIGSTOP);
+                kill_job(j,next,SIGCONT);
+                updated++;
+            }
+            // Si sólo hay uno, puede que esté parado, porque no le tocaba. Así
+            // que lo pongo en marcha. Esto puede suceder, cuando se killall al
+            // comando round robin, y el último está parado, pero tiene planificada
+            // la señal de terminar.
+            else
+                kill(-j->gpid, SIGCONT);
+
+        
+        j = j->next;
+    }
+    
+    if (updated)
+        alarm(1);
+    else
+        shell.sigalarm_on = 0;
 }
 
 /**
  * El manejador de SIGCHLD actualiza la lista de trabajos.
  */
 
-void handler_sigchld(int sig) {
+void updateJobs(int sig) {
     Job * j = shell.jobs;
-    int status;
+    int status, total, i;
     pid_t pid;
-    
+    Process * p;
+
     while (j) {
+        p = j->proc;
         
-        pid = waitpid(- j->gpid, &status, WNOHANG | WUNTRACED | WCONTINUED);
-        
-        // pid > 0 significa "alguien notificó su estado", si devuelve 0, es que no está
-        // el hijo disponible, y -1 si no existe el hijo.
-        if (pid > 0) {
-            next_state(j, status, 0, 0);
-            // Se notifica al usuario, si el proceso se detuvo en background
-            j->notify = j->status == job_stopped && !j->foreground;
+        while (p) {
+
+            pid = waitpid(p->pid, &status, WNOHANG | WUNTRACED | WCONTINUED);
+            
+            if (pid > 0) 
+                mark_process(j, status, pid);
+            
+            p = p->next;
         }
         
+        if (j->total > 1)
+            cleanInnerJobs(j);
         
+        analyce_job_status(j);
+        j->notify = (j->status == STOPPED || IS_JOB_ENDED(j->status)) && !j->foreground;
         j = j->next;
         
     }
@@ -132,8 +195,12 @@ void init_shell() {
     // Ignoramos todo.
     control_signals(SIG_IGN);
     
+    // Manejamos la señal de SIGALARM.    
+    signal(SIGALRM, roundRobin);
+    shell.sigalarm_on = 0;
+    
     // Manejamos la señal SIGCHLD
-    signal(SIGCHLD, handler_sigchld);
+    signal(SIGCHLD, updateJobs);
 }
 
 void destroy_shell() {
@@ -141,8 +208,33 @@ void destroy_shell() {
     destroy_list_jobs(&shell.jobs);
 }
 
+void report_job_foreground(Job * job) {
+    char signaled;
+    
+    print_info("Foreground job ... pid : %d, command : %s, ", job->gpid, job->command);
+    
+    if (job->status == STOPPED) {
+        tcgetattr(shell.fdin, &job->tmodes);
+        job->cargarModo = 1;
+        job->foreground = 0;
+        print_info("detenido\n");
+    }
+    else {
+        
+        if (job->status == COMPLETED) {
+            print_info("exited : %d\n", *(job->info));
+        }
+        else  {
+            print_info("signaled : %d\n", *(job->info));
+        }
+        
+        remove_job(&shell.jobs, job->gpid);
+    }
+}
+
 void put_job_foreground(Job * job) {
     int status;
+    pid_t pid;
     
     // Pospongo las señales del manejador, hasta que este proceso se maneje.
     block_sigchld();
@@ -152,43 +244,24 @@ void put_job_foreground(Job * job) {
         tcsetattr(shell.fdin, TCSADRAIN, &job->tmodes);
     }
     
-    if (job->status == job_executed && !job->foreground) {
-        job->foreground = 1;
-        tcsetpgrp(shell.fdin, job->gpid);
-    }
+    job->foreground = 1;
+    tcsetpgrp(shell.fdin, job->gpid);
     
     // Si el trabajo se paró..
-    if (job->status == job_stopped) {
-        next_state(job, 0, 1, 0);
-        // Le damos la terminal (Antes del CONT, anterior fallo con cat &)
-        tcsetpgrp(shell.fdin, job->gpid);
-        // Le decimos continuar, si se bloqueó porque no tenía la shell, se la 
-        // damos antes de enviar la señal.
-        kill(-job->gpid, SIGCONT);            
-    }
+    if ( job->status == STOPPED) 
+        kill(-job->gpid, SIGCONT);    
     
-    waitpid(- job->gpid, &status, WUNTRACED);
-    next_state(job, status,0,0);
-    
-    print_info("Foreground job ... pid : %d, command : %s, ", job->gpid, job->command);
-    
-    if (job->status == job_stopped) {
-        tcgetattr(shell.fdin, &job->tmodes);
-        job->cargarModo = 1;
-        print_info("detenido\n");
-    }
-    else {
+    do {
+        pid = waitpid(- job->gpid, &status, WUNTRACED);
         
-        if (job->status == job_completed) {
-            print_info("exited : %d\n", job->info);
-        }
-        else  {
-            print_info("signaled : %d\n", job->info);
+        if (pid > 0) {
+            mark_process(job, status, pid);
+            analyce_job_status(job);
         }
         
-        remove_job(&shell.jobs, job->gpid);
-    }
+    } while ( job->status == RUNNING );
     
+    report_job_foreground(job);
     unblock_sigchld();
     
     tcsetpgrp(shell.fdin, shell.pid);
@@ -197,8 +270,8 @@ void put_job_foreground(Job * job) {
 
 void put_job_background(Job * job) {
     
-    if (job->status == job_stopped) {
-        job->status = job_executed;
+    if (job->status == STOPPED) {
+        job->status = RUNNING;
         job->foreground = 0;
         kill(- job->gpid, SIGCONT);
     }
@@ -206,8 +279,9 @@ void put_job_background(Job * job) {
     print_info("Background job ... pid : %d, command : %s\n", job->gpid, job->command);
 }
 
-void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foreground, int icmd) {
+void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foreground) {
     pid_t pid;
+    int icmd;
     
     pid = getpid();
     
@@ -221,41 +295,41 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
     
     signal(SIGCHLD, SIG_DFL);
     control_signals(SIG_DFL);
-    
-    if (icmd < 0) { // Si no es un comando interno, se ejecuta el ejecutable.
+
+    icmd = indexOfInternalProcess(p);
+    // Si no es un comando interno, o este no tiene manejador
+    if (icmd < 0 || !ICMD_HANDLER(icmd)) { 
         execvp(p->args[0], p->args);
         putchar('\n');
         print_error("Error comando no enonctrado, commando : %s\n", p->args[0]);
         exit(errno);
     } // Si es interno, se ejecuta el manejador.
     else {
-        ICMD_HANDLER(icmd)(NULL);
+        ICMD_HANDLER(icmd)(p);
         exit(0);
     }
     
 }
 
-void launch_forked_job(Job * job, int icmd) {
+void launch_forked_job(Job * job) {
     Process * p = job->proc;
     
     while (p) {
         p->pid = fork(); 
         
         if (p->pid == 0) 
-            launch_process(p, shell.fdin, STDOUT_FILENO,job->gpid,job->foreground, icmd);
+            launch_process(p, shell.fdin, STDOUT_FILENO,job->gpid,job->foreground);
         else {
             
             if (job->gpid == 0)
                 job->gpid = p->pid;
             
             setpgid(p->pid, job->gpid);
-            
+            mark_process(job,0,p->pid);
         }
         
         p = p->next;
     }
-    
-    next_state(job,0,job->foreground,1);
     
     if (job->foreground)
         put_job_foreground(job);
@@ -272,13 +346,13 @@ void launch_forked_job(Job * job, int icmd) {
  * @return  índice del trabajo interno, o -1 en caso de que no sea interno.
  */
 
-int indexInternalJob(Job * job) {
+int indexOfInternalProcess(Process * p) {
     int index = -1;
     int j = 0;
     
     while (index == -1 && j < ICMD_TOTAL) {
         
-        if (strcmp(job->proc->args[0], ICMD_STR(j)) == 0)
+        if (strcmp(p->args[0], ICMD_STR(j)) == 0)
             index = j;
         
         j++;
@@ -294,18 +368,77 @@ void launch_job(Job * job) {
     if (job == NULL) // Causado por una línea vacía por el 
         return;
     
-    index = indexInternalJob(job);
+    index = indexOfInternalProcess(job->proc);
     
     if (index >= 0 && ICMD_HANDLER(index) && !ICMD_FORK(index)) {
-        job->gpid = -1;        
+        job->gpid = -1;
         internalCommands.handler[index](job->proc);
         block_sigchld();
-        remove_job(&shell.jobs, -1);
+        if (index ==  cmd_rr) remove_job(&shell.jobs, -1);
         unblock_sigchld();
     }
     else
-        launch_forked_job(job, index);
+        launch_forked_job(job);
     
+}
+
+// ---------------------------------------------------------------------------//
+// -------------------------- COMANDOS INTERNOS-------------------------------//
+// ---------------------------------------------------------------------------//
+
+void cmd_rr_handler(Process * p) {
+    Job * job = search_job_by_process(shell.jobs, p->pid);
+    int num, i;
+    
+    if (p->argc < 3) {
+        print_error("Formato: rr <num> <command>\n");
+        return;
+    }
+    
+    num = atoi(p->args[1]);
+    
+    if (num < 1) {
+        print_error("El número debe ser mayor que 1\n");
+        return;
+    }
+    
+    // Eliminamos del proceso rr y el número.
+    for (i = 0 ; i < p->argc - 1; i++)
+        p->args[i] = p->args[i+2];
+    
+    p->argc -= 2;
+    job->foreground = 0;
+    job->type = RR_JOB;
+    // Duplicamos los trabajos.
+    for (i = 0 ; i < num - 1 ; i++)
+        dup_job_command(job);
+    
+    while (p) {
+        p->pid = fork();
+        
+        if (!p->pid)
+            launch_process(p,shell.fdin,STDOUT_FILENO,job->gpid,job->foreground);
+        // padre.
+        
+        if (job->gpid == -1)
+            job->gpid = p->pid;
+        
+        setpgid(p->pid,job->gpid);
+        mark_process(job,0,p->pid);
+        p = p->next;
+    }
+    
+    kill(-job->gpid, SIGSTOP);
+    kill_job(job, 0, SIGCONT);
+    analyce_job_status(job);
+    //job->activo = job->total - 1;
+    print_info("Background job ... pid : %d, command : %s\n", job->gpid,
+               job->command);
+    
+    if (!shell.sigalarm_on) {
+        alarm(1);
+        shell.sigalarm_on = 1;
+    }
 }
 
 void cmd_cd_handler(Process * p) {
@@ -371,7 +504,12 @@ void cmd_fg_handler(Process * p) {
     fg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_fg]);
 
     if (fg_job)
-        put_job_foreground(fg_job);
+        
+        if (fg_job->type == NORMAL_JOB)
+            put_job_foreground(fg_job);
+        else 
+            printf("Un trabajo round robin, no se puede traer a foreground.\n");
+    
 }
 
 void cmd_bg_handler(Process * p) {
@@ -380,7 +518,11 @@ void cmd_bg_handler(Process * p) {
     bg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_bg]);
 
     if (bg_job)
-        put_job_background(bg_job);
+        
+        if (bg_job->status != RUNNING)
+            put_job_background(bg_job);
+        else
+            printf("El trabajo ya está en ejecución.\n");
 }
 
 void cmd_jobs_handler(Process * p) {
@@ -406,7 +548,7 @@ void notify_and_clean_jobs() {
     Job * job = shell.jobs;
     int i = 1;
     
-    printf(C_BROWN);
+    printf(C_GREEN);
     while (job) {
         
         if (!job->foreground && IS_JOB_ENDED(job->status)) {
@@ -441,7 +583,12 @@ void config_internal_commands() {
     LINK_CMD(cmd_bg, cmd_bg_handler);
     LINK_CMD(cmd_jobs, cmd_jobs_handler);
     LINK_CMD(cmd_exit, cmd_exit_handler);
+    LINK_CMD(cmd_rr, cmd_rr_handler);
 }
+
+// ---------------------------------------------------------------------------//
+// ---------------------------------- MAIN------------------------------------//
+// ---------------------------------------------------------------------------//
 
 int main() {
     char * cmd;

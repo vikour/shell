@@ -22,6 +22,7 @@ struct T_Shell {
   pid_t pid;
   History hist;
   ListJobs jobs;
+  char sigalarm_on;
   struct termios mode;
 } shell;
 
@@ -42,7 +43,8 @@ typedef struct {
    CMD(cmd_fg,   CMDFG,    0) \
    CMD(cmd_bg,   CMDBG,    0) \
    CMD(cmd_jobs, CMDJOBS,  1) \
-   CMD(cmd_cd,   CMDCD,    0)
+   CMD(cmd_cd,   CMDCD,    0) \
+   CMD(cmd_rr,   CMDRR,    0)
 
 // Creación de la enumeración
 enum internal_command_names {
