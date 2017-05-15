@@ -213,8 +213,9 @@ void put_job_background(Job * job) {
     print_info("Background job ... pid : %d, command : %s\n", job->gpid, job->command);
 }
 
-void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foreground, int icmd) {
+void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foreground) {
     pid_t pid;
+    int icmd;
     
     pid = getpid();
     
@@ -229,6 +230,8 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
     signal(SIGCHLD, SIG_DFL);
     control_signals(SIG_DFL);
     
+    icmd = indexOfInternalProcess(p);
+    
     if (icmd < 0) { // Si no es un comando interno, se ejecuta el ejecutable.
         execvp(p->args[0], p->args);
         putchar('\n');
@@ -242,14 +245,14 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
     
 }
 
-void launch_forked_job(Job * job, int icmd) {
+void launch_forked_job(Job * job) {
     Process * p = job->proc;
     
     while (p) {
         p->pid = fork(); 
         
         if (p->pid == 0) 
-            launch_process(p, shell.fdin, STDOUT_FILENO,job->gpid,job->foreground, icmd);
+            launch_process(p, shell.fdin, STDOUT_FILENO,job->gpid,job->foreground);
         else {
             
             if (job->gpid == 0)
@@ -277,13 +280,13 @@ void launch_forked_job(Job * job, int icmd) {
  * @return  índice del trabajo interno, o -1 en caso de que no sea interno.
  */
 
-int indexInternalJob(Job * job) {
+int indexOfInternalProcess(Process * p) {
     int index = -1;
     int j = 0;
     
     while (index == -1 && j < ICMD_TOTAL) {
         
-        if (strcmp(job->proc->args[0], ICMD_STR(j)) == 0)
+        if (strcmp(p->args[0], ICMD_STR(j)) == 0)
             index = j;
         
         j++;
@@ -299,7 +302,7 @@ void launch_job(Job * job) {
     if (job == NULL) // Causado por una línea vacía por el 
         return;
     
-    index = indexInternalJob(job);
+    index = indexOfInternalProcess(job->proc);
     
     if (index >= 0 && ICMD_HANDLER(index) && !ICMD_FORK(index)) {
         job->gpid = -1;        
@@ -309,7 +312,7 @@ void launch_job(Job * job) {
         unblock_sigchld();
     }
     else
-        launch_forked_job(job, index);
+        launch_forked_job(job);
     
 }
 
