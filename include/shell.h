@@ -43,7 +43,7 @@ typedef struct {
    CMD(cmd_bg,      CMDBG,    0) \
    CMD(cmd_jobs,    CMDJOBS,  1) \
    CMD(cmd_cd,      CMDCD,    0) \
-   CMD(cmd_hist,    CMDHIST,  0)
+   CMD(cmd_hist,    CMDHIST,  1)
 
 // Creación de la enumeración
 enum internal_command_names {

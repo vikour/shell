@@ -116,7 +116,7 @@ char is_job_n_completed(Job * job, int i, char * signaled);
 #define is_job_background(j) is_job_running(j) && !(j)->foreground
 
 void mark_process(Job * job, int status, pid_t pid);
-
+Job * search_job_by_process(ListJobs jobs, pid_t pid);
 void analyce_job_status(Job * job);
 
 #endif /* JOBS_CONTROL_H */

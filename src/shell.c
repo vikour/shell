@@ -219,7 +219,7 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
     
     pid = getpid();
     
-    if (gpid == 0)
+    if (gpid <= 0)
         gpid = pid;
     
     setpgid(pid, gpid);
@@ -255,7 +255,7 @@ void launch_forked_job(Job * job) {
             launch_process(p, shell.fdin, STDOUT_FILENO,job->gpid,job->foreground);
         else {
             
-            if (job->gpid == 0)
+            if (job->gpid <= 0)
                 job->gpid = p->pid;
             
             setpgid(p->pid, job->gpid);
@@ -307,9 +307,13 @@ void launch_job(Job * job) {
     if (index >= 0 && ICMD_HANDLER(index) && !ICMD_FORK(index)) {
         job->gpid = -1;        
         internalCommands.handler[index](job->proc);
-        block_sigchld();
-        remove_job(&shell.jobs, -1);
-        unblock_sigchld();
+        
+        if (index != cmd_hist) {
+            block_sigchld();
+            remove_job(&shell.jobs, -1);
+            unblock_sigchld();
+        }
+        
     }
     else
         launch_forked_job(job);
@@ -329,45 +333,26 @@ void list_history(Process * p) {
     }
 }
 
-HistoryLine modify_last_line(HistoryLine line) {
-    char aux[MAX_LINE_COMMAND];
-    HistoryLine last = getLastCommand(&shell.hist);
-    char * ptr = last->command + strlen(CMDHIST) + 1;
-    int lenght = strlen(line->command);
-    
-    // mientras no encuentre la tuberia "|" o el fin de linea...
-    while ( *ptr != '|' && *ptr != '\0')
-        ptr++;
-    
-    strcpy(aux,line->command);
-    aux[lenght] = ' ';
-    aux[lenght] = ' ';
-    strcpy(aux + lenght + 1, ptr);
-    strcpy(last->command, aux);
-    
-    return last;
-}
-
 void cmd_hist_handler(Process * p) {
     HistoryLine line;
     int num;
     Job * job;
     
-    if (p->argc < 2) {
-        LINK_CMD(cmd_hist, list_history);
-        job = create_job(&shell.jobs,CMDHIST);
-        launch_forked_job(job, cmd_hist);
-        LINK_CMD(cmd_hist, cmd_hist_handler);
-    }
+    if (p->argc < 2) 
+        list_history(p);
     else {
         num = atoi(p->args[1]);
         line = getLine(&shell.hist, num);
 
         if (line) {
-            line = modify_last_line(line);            
-            printf("Ejecutar : %s\n", line->command);
-            //job = create_job(&shell.jobs, line->command);
-            //launch_job(job);
+            // Configuramos la terminal hija.
+            shell.pid = getpid();
+            signal(SIGCHLD,handler_sigchld);
+            control_signals(SIG_IGN);
+            // Ejecutamos el comando.
+            printf("> Historial %d = %s\n", num, line->command);
+            job = create_job(&shell.jobs, line->command);
+            launch_job(job);
         }
         else
             printf("No existe el comando\n");
