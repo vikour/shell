@@ -33,5 +33,6 @@
 #define CMDFG   "fg"
 #define CMDBG   "bg"
 #define CMDCD   "cd"
+#define CMDHIST "historial"
 
 #endif

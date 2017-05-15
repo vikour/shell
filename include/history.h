@@ -91,6 +91,17 @@ Node * getFirstCommand(History * hist);
 Node * getLastCommand(History * hist);
 
 /**
+ * Esta función permite acceder a una linea del historial por su número. Devolverá
+ * NULL si no existe tal linea.
+ * 
+ * @param hist  Historial
+ * @param n     Número de línea.
+ * @return      La línea del historial.
+ */
+
+HistoryLine getLine(History * hist, int n);
+
+/**
  * Permite obtener la siguiente entrada a la pasada por argumento en el historial.
  * Esta función está pensada para navegar por el historial. Esta puede ser NULL
  * si no hay siguiente.

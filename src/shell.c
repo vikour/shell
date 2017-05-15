@@ -313,6 +313,48 @@ void launch_job(Job * job) {
     
 }
 
+void list_history(Process * p) {
+    int i = 1;
+    HistoryLine line;
+    
+    line = getFirstCommand(&shell.hist);
+
+    while (line) {
+        printf("%3d. %s\n", i, line->command);
+        i++;
+        nextCommand(&line);
+    }
+}
+
+void cmd_hist_handler(Process * p) {
+    HistoryLine line;
+    int num;
+    Job * job;
+    
+    if (p->argc < 2) {
+        //LINK_CMD(cmd_hist, list_history);
+        //job = create_job(&shell.jobs,CMDHIST);
+        //launch_forked_job(job, cmd_hist);
+        //LINK_CMD(cmd_hist, cmd_hist_handler);
+        list_history(p);
+    }
+    else {
+        num = atoi(p->args[1]);
+        line = getLine(&shell.hist, num);
+        
+        if (line) {
+            printf("Ejecutar : %s\n", line->command);
+            shell.pid = getpid();
+            job = create_job(&shell.jobs, line->command);
+            launch_job(job);
+        }
+        else
+            printf("No existe el comando\n");
+
+    }
+    
+}
+
 void cmd_cd_handler(Process * p) {
     const char * dir = p->args[1];
     
@@ -446,6 +488,7 @@ void config_internal_commands() {
     LINK_CMD(cmd_bg, cmd_bg_handler);
     LINK_CMD(cmd_jobs, cmd_jobs_handler);
     LINK_CMD(cmd_exit, cmd_exit_handler);
+    LINK_CMD(cmd_hist, cmd_hist_handler);
 }
 
 int main() {

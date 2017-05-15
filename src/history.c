@@ -83,6 +83,17 @@ void nextCommand(HistoryLine* node) {
     
 }
 
+HistoryLine getLine(History * hist, int n) {
+    HistoryLine line = hist->first;
+    
+    while (n > 1 && line) {
+        nextCommand(&line);
+        n--;
+    }
+    
+    return line;
+}
+
 void prevCommand(HistoryLine * node) {
     
     if (*node)
