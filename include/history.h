@@ -34,7 +34,8 @@ struct H_Node {
 struct S_History {
   Node * first;                     // Primera línea del historial.
   Node * last;                      // Última línea del historial.
-    HistoryLine selected;           // Entrada seleccionada.
+  HistoryLine selected;             // Entrada seleccionada.
+  int total;
 };
 
 typedef struct S_History History;

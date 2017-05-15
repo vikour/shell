@@ -335,28 +335,13 @@ void list_history(Process * p) {
 
 void cmd_hist_handler(Process * p) {
     HistoryLine line;
-    int num;
+    int num, i;
     Job * job;
     
     if (p->argc < 2) 
         list_history(p);
     else {
-        num = atoi(p->args[1]);
-        line = getLine(&shell.hist, num);
-
-        if (line) {
-            // Configuramos la terminal hija.
-            shell.pid = getpid();
-            signal(SIGCHLD,handler_sigchld);
-            control_signals(SIG_IGN);
-            // Ejecutamos el comando.
-            printf("> Historial %d = %s\n", num, line->command);
-            job = create_job(&shell.jobs, line->command);
-            launch_job(job);
-        }
-        else
-            printf("No existe el comando\n");
-
+        print_error("%s : error %s fuera de ragno.\n", CMDHIST, p->args[1]);
     }
     
 }

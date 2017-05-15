@@ -264,27 +264,100 @@ static void printCommand(const char * buff, int cursor, int length) {
         printf("\033[%dC", cursor);     // Muevo el cursor a la posición correcta.
 }
 
-static void trim(char * begin) {
-    int count = 2;
-    char * ptr = begin;
+void parse_background_characters(char * cmd) {
+    int cur, length;
+    char * reject = "&+", ch = 0;
     
-    while (*ptr != '\0') {
+    length = strlen(cmd);
+    cur = 0;
+    
+    if ( strcspn(cmd,reject) != length) {
         
-        if (*ptr == ' ')
-            count++;
-        else if (count >= 2)
-            count = 0;
-        
-        if (count < 2) {
-            *begin = *ptr;
-            begin++;
+        while (cur < length) {
+            
+            if (cmd[cur] == '&' || cmd[cur] == '+') {
+                
+                if (ch == 0)
+                    ch = cmd[cur];
+                else if (ch == '&' && cmd[cur] == '+')
+                    ch = '+';
+                
+                shiftLeft(cmd,cur + 1, length);
+                length--;                
+                
+                if (cmd[cur] == ' ') {
+                    shiftLeft(cmd,cur + 1, length);
+                    length--;
+                }
+                
+                
+            }
+            
+            cur++;
         }
         
-        ptr++;
+        if ( cmd[length - 1] != ' ') {
+            cmd[length] = ' ';
+            length++;
+        }
+        
+        cmd[length] = ch;
+        cmd[length+1] = '\0';
     }
     
-    *begin = '\0';
+}
+
+void parse_history_commands(History * hist, char * cmd) {
+    char * rptr = strstr(cmd,CMDHIST);                        // Puntero de lectura.
+    char aux[MAX_LINE_COMMAND];
+    char * wptr = aux;                                        // Puntero de escritura.
+    char * mark,                                              // Marca de después de una escritura.
+         * mark2;                                             // Marca de inicio de lectura.
+    int num, length;
+    HistoryLine line;
     
+    if (!rptr)
+        return;
+    
+    mark = rptr;                                              // Por defecto
+    
+    do {
+        mark2 = rptr;                                         // marcamos el inicio de la lectura.
+        rptr += strlen(CMDHIST) + 1;                          // Avanzamos toda la palabra del 'historial' y un espacio.
+        
+        while (*rptr == ' ')                                  // Avanzamos todos los espacios que halla de sobra.
+            rptr++;
+        
+        if (isdigit(*rptr) && (num = atoi(rptr)) <= hist->total) { // Si tal carácter es un dígito, y el número está en el rango del historial...
+            strncpy(wptr,mark,mark2-mark);                        // Copiamos la diferencia entre las dos marcas.
+            wptr += mark2-mark;                                   // avanzamos con el puntero.
+            // copiamos el comando que es.
+            line = getLine(hist, num);
+            length = strlen(line->command);
+            strncpy(wptr,line->command,length);
+            wptr += length;
+            // fin de copiado de comando.
+            while (rptr && *rptr != ' ' && *rptr != '\0')         // Quitamos espacios y posible final.
+                rptr++;
+        }
+        else {                                                // Si no, copiamos todo y avanzamos con el puntero.
+            strncpy(wptr,mark,rptr-mark+1);
+            wptr += rptr-mark;
+        }                                                     // Fin si.
+        
+        mark = rptr;                                         // marca de postescritura.
+        rptr = strstr(rptr, CMDHIST);                        // buscamos la siguiente palabra historial.
+        
+    } while (rptr && *rptr != '\0');                         // MIENTRAS, halla algo que leer.
+    
+    while (*mark != '\0') {                                  // Copiamos los restos.
+        *wptr = *mark;
+        wptr++;
+        mark++;
+    }
+    *wptr = '\0';                                            // Marcamos el fin de línea.
+    parse_background_characters(aux);
+    strcpy(cmd, aux);                                        // Copiamos el resultado al comando pasado como argumento.
 }
 
 char * getCommand(History * hist) {
@@ -421,7 +494,10 @@ char * getCommand(History * hist) {
     
     if (length == 0) // No se introdujo nada (linea vacía);
         return NULL;
-    else
+    else {
+        parse_history_commands(hist,lineSelected->command);
+        
         return lineSelected->command;
+    }
 }
 

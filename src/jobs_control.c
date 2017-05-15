@@ -45,7 +45,6 @@ static void prepare_job(Job * job) {
             _new_process(proc);
             i = 0;
             ptr++;
-            ((*proc)->argc)++;
         } else if ((*ptr == '\'' || *ptr == '\"') && offset <= 1) { // cambio de delimitador.
             del = *ptr;
             offset++;
