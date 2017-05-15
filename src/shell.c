@@ -326,27 +326,45 @@ void list_history(Process * p) {
     }
 }
 
+HistoryLine modify_last_line(HistoryLine line) {
+    char aux[MAX_LINE_COMMAND];
+    HistoryLine last = getLastCommand(&shell.hist);
+    char * ptr = last->command + strlen(CMDHIST) + 1;
+    int lenght = strlen(line->command);
+    
+    // mientras no encuentre la tuberia "|" o el fin de linea...
+    while ( *ptr != '|' && *ptr != '\0')
+        ptr++;
+    
+    strcpy(aux,line->command);
+    aux[lenght] = ' ';
+    aux[lenght] = ' ';
+    strcpy(aux + lenght + 1, ptr);
+    strcpy(last->command, aux);
+    
+    return last;
+}
+
 void cmd_hist_handler(Process * p) {
     HistoryLine line;
     int num;
     Job * job;
     
     if (p->argc < 2) {
-        //LINK_CMD(cmd_hist, list_history);
-        //job = create_job(&shell.jobs,CMDHIST);
-        //launch_forked_job(job, cmd_hist);
-        //LINK_CMD(cmd_hist, cmd_hist_handler);
-        list_history(p);
+        LINK_CMD(cmd_hist, list_history);
+        job = create_job(&shell.jobs,CMDHIST);
+        launch_forked_job(job, cmd_hist);
+        LINK_CMD(cmd_hist, cmd_hist_handler);
     }
     else {
         num = atoi(p->args[1]);
         line = getLine(&shell.hist, num);
-        
+
         if (line) {
+            line = modify_last_line(line);            
             printf("Ejecutar : %s\n", line->command);
-            shell.pid = getpid();
-            job = create_job(&shell.jobs, line->command);
-            launch_job(job);
+            //job = create_job(&shell.jobs, line->command);
+            //launch_job(job);
         }
         else
             printf("No existe el comando\n");
