@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include <wait.h>
 #include <sysexits.h>
+#include <ctype.h>
 
 void control_signals(void (*handler)(int)) {
     signal(SIGQUIT, handler);
@@ -410,6 +411,26 @@ void cmd_jobs_handler(Process * p) {
     
 }
 
+void cmd_error_timeout(){
+        print_error("Error al usar time-out...\n"
+                    "\tUsa: time-out <tiempo> <comando>\n");
+}
+
+void cmd_timeout_handler(Process * p) {
+    
+    if (p->argc < 3 )  {
+        cmd_error_timeout();
+        return;
+    }
+    
+    if (!isdigit(*p->args[1])) {
+        cmd_error_timeout();
+        return;
+    }
+    
+    printf("TIMEOUT STILL COMMING!!\n");
+}
+
 void notify_and_clean_jobs() {
     Job * job = shell.jobs;
     int i = 1;
@@ -449,6 +470,7 @@ void config_internal_commands() {
     LINK_CMD(cmd_bg, cmd_bg_handler);
     LINK_CMD(cmd_jobs, cmd_jobs_handler);
     LINK_CMD(cmd_exit, cmd_exit_handler);
+    LINK_CMD(cmd_timeout, cmd_timeout_handler);
 }
 
 int main() {

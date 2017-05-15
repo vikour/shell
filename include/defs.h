@@ -34,5 +34,6 @@
 #define CMDFG   "fg"
 #define CMDBG   "bg"
 #define CMDCD   "cd"
+#define CMDTOUT "time-out"
 
 #endif
