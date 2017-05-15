@@ -58,6 +58,23 @@ void print_job_state(int number, Job * job) {
     putchar('\n');
 }
 
+
+void block_sig(int sig) {
+    sigset_t block_sigchld;
+    
+    sigemptyset(&block_sigchld);
+    sigaddset(&block_sigchld, sig);
+    sigprocmask(SIG_BLOCK, &block_sigchld, NULL);
+}
+
+void unblock_sig(int sig) {
+    sigset_t block_sigchld;
+    
+    sigemptyset(&block_sigchld);
+    sigaddset(&block_sigchld, sig);
+    sigprocmask(SIG_UNBLOCK, &block_sigchld, NULL);
+}
+
 /**
  * Elimina todos los trabajos internos de un grupo de trabajos que ya han terminado.
  * 
@@ -67,6 +84,8 @@ void print_job_state(int number, Job * job) {
 void cleanInnerJobs(Job * j) {
     int total, i;
     total = j->total;
+    
+    block_sig(SIGALRM);
     // Actualizamos los trabajos internos si hay más de uno.
     for (i = 0; i < j->total && j->total > 1; i++)
 
@@ -75,6 +94,7 @@ void cleanInnerJobs(Job * j) {
 
     if (total != j->total)
         reenumerate_job(j);
+    unblock_sig(SIGALRM);
 }
 
 void roundRobin(int sig) {
@@ -142,22 +162,6 @@ void updateJobs(int sig) {
         
     }
     
-}
-
-void block_sigchld() {
-    sigset_t block_sigchld;
-    
-    sigemptyset(&block_sigchld);
-    sigaddset(&block_sigchld, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &block_sigchld, NULL);
-}
-
-void unblock_sigchld() {
-    sigset_t block_sigchld;
-    
-    sigemptyset(&block_sigchld);
-    sigaddset(&block_sigchld, SIGCHLD);
-    sigprocmask(SIG_UNBLOCK, &block_sigchld, NULL);
 }
 
 void init_shell() {
@@ -237,7 +241,7 @@ void put_job_foreground(Job * job) {
     pid_t pid;
     
     // Pospongo las señales del manejador, hasta que este proceso se maneje.
-    block_sigchld();
+    block_sig(SIGCHLD);
     
     // Si se almacenó el modo en el que el comando se detuvo, se reestablece.
     if ( job->cargarModo ) {
@@ -262,7 +266,7 @@ void put_job_foreground(Job * job) {
     } while ( job->status == RUNNING );
     
     report_job_foreground(job);
-    unblock_sigchld();
+    unblock_sig(SIGCHLD);
     
     tcsetpgrp(shell.fdin, shell.pid);
     tcsetattr(shell.fdin, TCSANOW,&shell.mode);
@@ -373,9 +377,9 @@ void launch_job(Job * job) {
     if (index >= 0 && ICMD_HANDLER(index) && !ICMD_FORK(index)) {
         job->gpid = -1;
         internalCommands.handler[index](job->proc);
-        block_sigchld();
+        block_sig(SIGCHLD);
         if (index ==  cmd_rr) remove_job(&shell.jobs, -1);
-        unblock_sigchld();
+        unblock_sig(SIGCHLD);
     }
     else
         launch_forked_job(job);
@@ -553,9 +557,9 @@ void notify_and_clean_jobs() {
         
         if (!job->foreground && IS_JOB_ENDED(job->status)) {
             print_job_state(i,job);
-            block_sigchld();
+            block_sig(SIGCHLD);
             remove_job(&shell.jobs, job->gpid);
-            unblock_sigchld();
+            unblock_sig(SIGCHLD);
         }
         else if (job->notify) {
             print_job_state(i, job);
