@@ -40,6 +40,7 @@ struct T_Job {
     State status;                       // estado del proceso.
     int * info;                       // Información acerca del estado.
     char notify;                      // Indica que se muestre el estado al usuario por cualquier motivo.
+    char respawnable;
     Process * proc;                   // Lista de procesos del trabajo.
     struct T_Job * next;              // Siguiente trabajo.
 };

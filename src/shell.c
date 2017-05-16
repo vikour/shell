@@ -17,6 +17,8 @@
 #include <wait.h>
 #include <sysexits.h>
 
+void launch_job(Job * job);
+
 void control_signals(void (*handler)(int)) {
     signal(SIGQUIT, handler);
     signal(SIGINT,  handler);
@@ -48,9 +50,27 @@ void print_job_state(int number, Job * job) {
             printf("%-15s","Signaled");
             break;
 
+        case READY:
+            printf("%-15s","Ready");
+            
     }
     
     printf("\t%s\n", job->command);
+}
+
+void respawnd_job(Job * j) {
+    Process * p;
+    
+    j->gpid = 0;
+    p = j->proc;
+
+    while (p) {
+        p->state = READY;
+        p = p->next;
+    }
+
+    j->status = RUNNING;
+    launch_job(j);
 }
 
 /**
@@ -59,25 +79,32 @@ void print_job_state(int number, Job * job) {
 
 void handler_sigchld(int sig) {
     Job * j = shell.jobs;
+    Process * p;
     int status;
     pid_t pid;
     
     while (j) {
+        p = j->proc;
         
-        pid = waitpid(- j->gpid, &status, WNOHANG | WUNTRACED | WCONTINUED);
+        while (p) {
+            pid = waitpid(- j->gpid, &status, WNOHANG | WUNTRACED | WCONTINUED);
+            
+            // pid > 0 significa "alguien notificó su estado", si devuelve 0, es que no está
+            // el hijo disponible, y -1 si no existe el hijo.
+            if (pid > 0) {
+                mark_process(j,status,pid);
+                
+            }
+            p = p->next;
+        } 
         
-        // pid > 0 significa "alguien notificó su estado", si devuelve 0, es que no está
-        // el hijo disponible, y -1 si no existe el hijo.
-        if (pid > 0) {
-            mark_process(j,status,pid);
-            analyce_job_status(j);
-            // Se notifica al usuario, si el proceso se detuvo en background
-            j->notify = (j->status == STOPPED || IS_JOB_ENDED(j->status)) && !j->foreground ;
-        }
+        analyce_job_status(j);
+        j->notify = (j->status == STOPPED || IS_JOB_ENDED(j->status)) && !j->foreground && !j->respawnable;
         
+        if (j->respawnable && j->status == COMPLETED) 
+            respawnd_job(j);
         
         j = j->next;
-        
     }
     
 }
@@ -210,6 +237,7 @@ void put_job_background(Job * job) {
         kill(- job->gpid, SIGCONT);
     }
     
+    analyce_job_status(job);
     print_info("Background job ... pid : %d, command : %s\n", job->gpid, job->command);
 }
 
@@ -248,6 +276,7 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
 void launch_forked_job(Job * job) {
     Process * p = job->proc;
     
+    printf("respawnable : %d\n", job->respawnable);
     while (p) {
         p->pid = fork(); 
         
@@ -269,7 +298,6 @@ void launch_forked_job(Job * job) {
         put_job_foreground(job);
     else
         put_job_background(job);
-    
 }
 
 /**
@@ -378,8 +406,10 @@ void cmd_fg_handler(Process * p) {
     
     fg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_fg]);
 
-    if (fg_job)
+    if (fg_job) {
+        fg_job->respawnable = 0;
         put_job_foreground(fg_job);
+    }
 }
 
 void cmd_bg_handler(Process * p) {
@@ -387,8 +417,10 @@ void cmd_bg_handler(Process * p) {
     
     bg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_bg]);
 
-    if (bg_job)
+    if (bg_job) {
+        bg_job->respawnable = 0;
         put_job_background(bg_job);
+    }
 }
 
 void cmd_jobs_handler(Process * p) {
@@ -418,6 +450,7 @@ void notify_and_clean_jobs() {
     while (job) {
         
         if (!job->foreground && IS_JOB_ENDED(job->status)) {
+            printf("Borrar %d\n", job->gpid);
             print_job_state(i,job);
             block_sigchld();
             remove_job(&shell.jobs, job->gpid);
