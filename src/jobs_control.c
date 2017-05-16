@@ -136,6 +136,7 @@ Job * create_job(ListJobs * list_jobs, const char * cmd) {
     (*curr)->next = NULL;
     (*curr)->cargarModo = 0;
     (*curr)->notify = 0;
+    (*curr)->time_out = 0;
     prepare_job(*curr);
 
     return *curr;
@@ -284,4 +285,26 @@ void analyce_job_status(Job * job) {
         job->status = RUNNING;
     }
     
+}
+
+Job * search_job_by_process(ListJobs jobs, pid_t pid) {
+    Job * j = NULL;
+    Job * curr = jobs;
+    Process * p;
+    
+    while (curr && !j) {
+        p = curr->proc;
+        
+        while (p && !j) {
+            
+            if (p->pid == pid)
+                j = curr;
+            
+            p = p->next;
+        }
+        
+        curr = curr->next;
+    }
+    
+    return j;
 }

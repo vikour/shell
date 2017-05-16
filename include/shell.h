@@ -52,6 +52,13 @@ enum internal_command_names {
     #undef CMD
 };
 
+
+// Información para la hebra de time out
+struct info_time_out {
+    pid_t gpid;
+    int time;
+};
+
 // Generación de la estructura de información.
 #define CAT_NOEXPAND(A) A
 #define CAT(A) CAT_NOEXPAND(A)

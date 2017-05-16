@@ -17,6 +17,9 @@
 #include <wait.h>
 #include <sysexits.h>
 #include <ctype.h>
+#include <pthread.h>
+
+void * thread_time_out(void *);
 
 void control_signals(void (*handler)(int)) {
     signal(SIGQUIT, handler);
@@ -220,7 +223,7 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
     
     pid = getpid();
     
-    if (gpid == 0)
+    if (gpid <= 0)
         gpid = pid;
     
     setpgid(pid, gpid);
@@ -248,6 +251,7 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
 
 void launch_forked_job(Job * job) {
     Process * p = job->proc;
+    pthread_t tid;
     
     while (p) {
         p->pid = fork(); 
@@ -256,7 +260,7 @@ void launch_forked_job(Job * job) {
             launch_process(p, shell.fdin, STDOUT_FILENO,job->gpid,job->foreground);
         else {
             
-            if (job->gpid == 0)
+            if (job->gpid <= 0)
                 job->gpid = p->pid;
             
             setpgid(p->pid, job->gpid);
@@ -265,6 +269,9 @@ void launch_forked_job(Job * job) {
         
         p = p->next;
     }
+    
+    if (job->time_out > 0) 
+        pthread_create(&tid,NULL, thread_time_out,job);
     
     if (job->foreground)
         put_job_foreground(job);
@@ -309,7 +316,7 @@ void launch_job(Job * job) {
         job->gpid = -1;        
         internalCommands.handler[index](job->proc);
         block_sigchld();
-        remove_job(&shell.jobs, -1);
+        if (index != cmd_timeout) remove_job(&shell.jobs, -1);
         unblock_sigchld();
     }
     else
@@ -416,7 +423,17 @@ void cmd_error_timeout(){
                     "\tUsa: time-out <tiempo> <comando>\n");
 }
 
+void * thread_time_out(void * attr) {
+    Job * job = (Job * ) attr;
+    
+    block_sigchld();
+    sleep(job->time_out);
+    kill(-job->gpid, SIGKILL);
+}
+
 void cmd_timeout_handler(Process * p) {
+    int i;
+    Job * job = search_job_by_process(shell.jobs,p->pid);
     
     if (p->argc < 3 )  {
         cmd_error_timeout();
@@ -428,7 +445,13 @@ void cmd_timeout_handler(Process * p) {
         return;
     }
     
-    printf("TIMEOUT STILL COMMING!!\n");
+    job->time_out = atoi(p->args[1]);
+    
+    // Eliminamos del proceso time-out y el tiempo
+    for (i = 0 ; i < p->argc - 1; i++)
+        p->args[i] = p->args[i+2];
+    
+    launch_job(job);
 }
 
 void notify_and_clean_jobs() {
