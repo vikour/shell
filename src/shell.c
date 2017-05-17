@@ -270,7 +270,7 @@ void launch_forked_job(Job * job) {
         p = p->next;
     }
     
-    if (job->time_out > 0) 
+    if (job->time_out != 0) 
         pthread_create(&tid,NULL, thread_time_out,job);
     
     if (job->foreground)
@@ -427,8 +427,12 @@ void * thread_time_out(void * attr) {
     Job * job = (Job * ) attr;
     
     block_sigchld();
-    sleep(job->time_out);
-    kill(-job->gpid, SIGKILL);
+    
+    if (job->time_out > 0)
+        sleep(job->time_out);
+    
+    if ( waitpid(-job->gpid,NULL, WNOHANG) >= 0)
+        kill(-job->gpid, SIGKILL);
 }
 
 void cmd_timeout_handler(Process * p) {
@@ -446,6 +450,9 @@ void cmd_timeout_handler(Process * p) {
     }
     
     job->time_out = atoi(p->args[1]);
+    
+    if (job->time_out == 0)
+        job->time_out = -1;
     
     // Eliminamos del proceso time-out y el tiempo
     for (i = 0 ; i < p->argc - 1; i++)
