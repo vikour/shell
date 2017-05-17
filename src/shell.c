@@ -230,10 +230,10 @@ void launch_process(Process * p, int infile, int outfile, pid_t gpid, char foreg
     
     // configuración de la entrada.
     if (infile != shell.fdin)
-        dup2(STDIN_FILENO, infile);
+        dup2(infile, shell.fdin);
     
     if (outfile != STDOUT_FILENO)
-        dup2(STDOUT_FILENO, outfile);
+        dup2(outfile, STDOUT_FILENO);
     
     signal(SIGCHLD, SIG_DFL);
     control_signals(SIG_DFL);
