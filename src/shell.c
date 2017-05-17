@@ -67,7 +67,6 @@ void print_job_state(int number, Job * job) {
     putchar('\n');
 }
 
-
 void block_sig(int sig) {
     sigset_t block_sigchld;
     
@@ -83,6 +82,17 @@ void unblock_sig(int sig) {
     sigaddset(&block_sigchld, sig);
     sigprocmask(SIG_UNBLOCK, &block_sigchld, NULL);
 }
+
+void respawnd_job(Job * j) {
+    Job * nj;
+    
+    block_sig(SIGCHLD);
+    nj = create_job(&shell.jobs,j->command);
+    remove_job(&shell.jobs, j->gpid);
+    unblock_sig(SIGCHLD);
+    launch_job(nj);
+}
+
 
 /**
  * Elimina todos los trabajos internos de un grupo de trabajos que ya han terminado.
@@ -165,12 +175,14 @@ void updateJobs(int sig) {
         
         if (j->total > 1)
             cleanInnerJobs(j);
-        if (j->respawnable && j->status == COMPLETED) 
-            printf("Respawned!!");
-            //respawnd_job(j);
         
         analyce_job_status(j);
-        j->notify = ((j->status == STOPPED && j->type == RR_JOB) || IS_JOB_ENDED(j->status)) && 
+        
+        
+        if (j->respawnable && j->status == COMPLETED) 
+            respawnd_job(j);
+        
+        j->notify = ((j->status == STOPPED && j->type != RR_JOB) || IS_JOB_ENDED(j->status)) && 
                     !j->foreground && !j->respawnable;
         j = j->next;
     }
@@ -226,7 +238,6 @@ void destroy_shell() {
 }
 
 void report_job_foreground(Job * job) {
-    char signaled;
     
     print_info("Foreground job ... pid : %d, command : %s, ", job->gpid, job->command);
     
@@ -429,37 +440,24 @@ void cmd_rr_handler(Process * p) {
     }
     
     // Eliminamos del proceso rr y el número.
+    free(p->args[0]); free(p->args[1]);
+    
     for (i = 0 ; i < p->argc - 1; i++)
         p->args[i] = p->args[i+2];
     
     p->argc -= 2;
     job->foreground = 0;
     job->type = RR_JOB;
+    job->gpid = 0;
     // Duplicamos los trabajos.
     for (i = 0 ; i < num - 1 ; i++)
         dup_job_command(job);
     
-    while (p) {
-        p->pid = fork();
-        
-        if (!p->pid)
-            launch_process(p,shell.fdin,STDOUT_FILENO,job->gpid,job->foreground);
-        // padre.
-        
-        if (job->gpid == -1)
-            job->gpid = p->pid;
-        
-        setpgid(p->pid,job->gpid);
-        mark_process(job,0,p->pid);
-        p = p->next;
-    }
+    launch_forked_job(job);
     
     kill(-job->gpid, SIGSTOP);
     kill_job(job, 0, SIGCONT);
     analyce_job_status(job);
-    //job->activo = job->total - 1;
-    print_info("Background job ... pid : %d, command : %s\n", job->gpid,
-               job->command);
     
     if (!shell.sigalarm_on) {
         alarm(1);
@@ -530,7 +528,11 @@ void cmd_fg_handler(Process * p) {
     fg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_fg]);
 
     if (fg_job) {
-        fg_job->respawnable = 0;
+        
+        if (fg_job->respawnable) {
+            printf("\"%s\" ya no es respawnable\n");
+            fg_job->respawnable = 0;
+        }
         
         if (fg_job->type == NORMAL_JOB)
             put_job_foreground(fg_job);
@@ -546,7 +548,11 @@ void cmd_bg_handler(Process * p) {
     bg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_bg]);
 
     if (bg_job) {
-        bg_job->respawnable = 0;
+        
+        if (bg_job->respawnable) {
+            printf("\"%s\" ya no es respawnable\n");
+            bg_job->respawnable = 0;
+        }
         
         if (bg_job->status != RUNNING)
             put_job_background(bg_job);
