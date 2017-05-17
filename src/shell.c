@@ -443,11 +443,11 @@ void cmd_timeout_handler(Process * p) {
         cmd_error_timeout();
         return;
     }
-    
+    /*
     if (!isdigit(*p->args[1])) {
         cmd_error_timeout();
         return;
-    }
+    }*/
     
     job->time_out = atoi(p->args[1]);
     
