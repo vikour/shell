@@ -318,9 +318,10 @@ void put_job_background(Job * job) {
     }
 }
 
-void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foreground) {
+void launch_process(Process * p, int infile, int outfile, pid_t gpid, char foreground) {
     pid_t pid;
     int icmd;
+    int value_exit;
     
     pid = getpid();
     
@@ -334,31 +335,61 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
     
     signal(SIGCHLD, SIG_DFL);
     control_signals(SIG_DFL);
-
+    
+    // configuración de la entrada.
+    if (infile != shell.fdin) {
+       dup2(infile, shell.fdin);
+       close(infile);
+    }
+    
+    if (outfile != STDOUT_FILENO) {
+        dup2(outfile, STDOUT_FILENO);
+        close(outfile);
+    }
+    
     icmd = indexOfInternalProcess(p);
     // Si no es un comando interno, o este no tiene manejador
     if (icmd < 0 || !ICMD_HANDLER(icmd)) { 
         execvp(p->args[0], p->args);
         putchar('\n');
         print_error("Error comando no enonctrado, commando : %s\n", p->args[0]);
-        exit(errno);
+        value_exit = errno;
     } // Si es interno, se ejecuta el manejador.
     else {
         ICMD_HANDLER(icmd)(p);
-        exit(0);
+        value_exit = 0;
     }
     
+    exit(value_exit);
 }
 
 void launch_forked_job(Job * job) {
     Process * p = job->proc;
     pthread_t tid;
+    int fdp[2];
+    int outfile, infile;
+    
+    outfile = STDOUT_FILENO;
+    infile  = shell.fdin;
     
     while (p) {
+        
+        // Configuración de pipes.
+        if (p->next) 
+            if ( pipe(fdp) < 0) {
+                print_error("Error al crear la tubería.");
+                exit(1);
+            }
+            else {
+                outfile = fdp[1];
+            }
+        else
+            outfile = STDOUT_FILENO;
+        
         p->pid = fork(); 
         
         if (p->pid == 0) 
-            launch_process(p, shell.fdin, STDOUT_FILENO,job->gpid,job->foreground);
+            launch_process(p, infile, outfile,job->gpid,job->foreground);
         else {
             
             if (job->gpid <= 0)
@@ -367,6 +398,15 @@ void launch_forked_job(Job * job) {
             setpgid(p->pid, job->gpid);
             mark_process(job,0,p->pid);
         }
+        
+        // configuracion de la entrada.
+        if (infile != shell.fdin)
+            close(infile);
+        
+        if (outfile != STDOUT_FILENO)
+            close(outfile);
+        
+        infile = fdp[0];
         
         p = p->next;
     }
