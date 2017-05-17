@@ -267,7 +267,6 @@ void launch_forked_job(Job * job) {
     infile  = shell.fdin;
     
     while (p) {
-        p->pid = fork(); 
         
         // Configuración de pipes.
         if (p->next) 
@@ -281,7 +280,7 @@ void launch_forked_job(Job * job) {
         else
             outfile = STDOUT_FILENO;
         
-        printf("p : %s\n, salida : %d ", p->args[0], outfile);
+        p->pid = fork(); 
         
         if (p->pid == 0) 
             launch_process(p, infile, outfile,job->gpid,job->foreground);
@@ -302,7 +301,6 @@ void launch_forked_job(Job * job) {
             close(outfile);
         
         infile = fdp[0];
-        printf("\n entrada : %d\n", infile);
         
         p = p->next;
     }
