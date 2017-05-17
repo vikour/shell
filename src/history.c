@@ -13,6 +13,7 @@
 void initHist(History * hist) {
     hist->first = NULL;
     hist->last = NULL;
+    hist->total = 0;
 }
 
 void destroyHist(History * hist) {
@@ -61,6 +62,7 @@ void append(History * hist, char * cmd) {
     if (!hist->first)
         hist->first = node;
     
+    hist->total++;
 }
 
 void appendUnprotectEntry(History * hist) {
@@ -81,6 +83,17 @@ void nextCommand(HistoryLine* node) {
     if (*node)
         *node = (*node)->next;
     
+}
+
+HistoryLine getLine(History * hist, int n) {
+    HistoryLine line = hist->first;
+    
+    while (n > 1 && line) {
+        nextCommand(&line);
+        n--;
+    }
+    
+    return line;
 }
 
 void prevCommand(HistoryLine * node) {
@@ -139,7 +152,9 @@ void removeLast(History * hist) {
             free(rm->backup);
         
         free(rm);
+        hist->total--;
     }
+    
 }
 
 

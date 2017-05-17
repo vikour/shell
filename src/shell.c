@@ -320,7 +320,7 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
     
     pid = getpid();
     
-    if (gpid == 0)
+    if (gpid <= 0)
         gpid = pid;
     
     setpgid(pid, gpid);
@@ -356,7 +356,7 @@ void launch_forked_job(Job * job) {
             launch_process(p, shell.fdin, STDOUT_FILENO,job->gpid,job->foreground);
         else {
             
-            if (job->gpid == 0)
+            if (job->gpid <= 0)
                 job->gpid = p->pid;
             
             setpgid(p->pid, job->gpid);
@@ -416,6 +416,32 @@ void launch_job(Job * job) {
     }
     else
         launch_forked_job(job);
+    
+}
+
+void list_history(Process * p) {
+    int i = 1;
+    HistoryLine line;
+    
+    line = getFirstCommand(&shell.hist);
+
+    while (line) {
+        printf("%3d. %s\n", i, line->command);
+        i++;
+        nextCommand(&line);
+    }
+}
+
+void cmd_hist_handler(Process * p) {
+    HistoryLine line;
+    int num, i;
+    Job * job;
+    
+    if (p->argc < 2) 
+        list_history(p);
+    else {
+        print_error("%s : error %s fuera de ragno.\n", CMDHIST, p->args[1]);
+    }
     
 }
 
@@ -620,6 +646,7 @@ void config_internal_commands() {
     LINK_CMD(cmd_jobs, cmd_jobs_handler);
     LINK_CMD(cmd_exit, cmd_exit_handler);
     LINK_CMD(cmd_rr, cmd_rr_handler);
+    LINK_CMD(cmd_hist, cmd_hist_handler);
 }
 
 // ---------------------------------------------------------------------------//

@@ -34,7 +34,8 @@ struct H_Node {
 struct S_History {
   Node * first;                     // Primera línea del historial.
   Node * last;                      // Última línea del historial.
-    HistoryLine selected;           // Entrada seleccionada.
+  HistoryLine selected;             // Entrada seleccionada.
+  int total;
 };
 
 typedef struct S_History History;
@@ -89,6 +90,17 @@ Node * getFirstCommand(History * hist);
  */
 
 Node * getLastCommand(History * hist);
+
+/**
+ * Esta función permite acceder a una linea del historial por su número. Devolverá
+ * NULL si no existe tal linea.
+ * 
+ * @param hist  Historial
+ * @param n     Número de línea.
+ * @return      La línea del historial.
+ */
+
+HistoryLine getLine(History * hist, int n);
 
 /**
  * Permite obtener la siguiente entrada a la pasada por argumento en el historial.

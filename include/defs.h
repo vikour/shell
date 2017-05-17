@@ -35,5 +35,6 @@
 #define CMDBG   "bg"
 #define CMDCD   "cd"
 #define CMDRR   "rr"
+#define CMDHIST "historial"
 
 #endif
