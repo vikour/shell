@@ -35,7 +35,8 @@ static void prepare_job(Job * job) {
 
     _new_process(proc);
     
-    while (ptr[offset] != '\0' && ptr[offset] != '&' && (*proc)->argc < MAX_LINE_COMMAND) {
+    while (ptr[offset] != '\0' && ptr[offset] != '&' && ptr[offset] != '+'  &&
+           (*proc)->argc < MAX_LINE_COMMAND) {
         
         // Se procesa el caracter leido.
         if (*ptr == ' ') {
@@ -67,7 +68,11 @@ static void prepare_job(Job * job) {
 
     } // end while.
 
-    if (*ptr == '&')
+    if (*ptr == '+') {
+        job->respawnable = 1;
+        job->foreground = 0;
+    }
+    else if (*ptr == '&')
         job->foreground = 0;
     else if (*ptr != '\0' && offset != 0 && (*proc)->argc < MAX_ARGS) { // Si había algo que copiar; se hace.
         allocateAndCopy(&(*proc)->args[i], ptr, offset);
@@ -160,6 +165,7 @@ Job * create_job(ListJobs * list_jobs, const char * cmd) {
     (*curr)->total = 1;
     (*curr)->active = 0;
     (*curr)->type = NORMAL_JOB;
+    (*curr)->respawnable = 0;
     prepare_job(*curr);
 
     return *curr;

@@ -17,6 +17,8 @@
 #include <wait.h>
 #include <sysexits.h>
 
+void launch_job(Job * job);
+
 void control_signals(void (*handler)(int)) {
     signal(SIGQUIT, handler);
     signal(SIGINT,  handler);
@@ -30,25 +32,32 @@ void print_job_state(int number, Job * job) {
     
     printf("[%d]\t", number);
 
-    switch (job->status) {
-
-        case COMPLETED:
-            printf("%-15s","Hecho");
-            break;
-
-        case STOPPED:
-            printf("%-15s","Detenido");
-            break;
-
-        case RUNNING:
-            printf("%-15s","En ejecución");
-            break;
-
-        case SIGNALED:
-            printf("%-15s","Signaled");
-            break;
-
-    }
+    
+    if (job->respawnable) 
+        printf("%-15s","Respawnable");
+    else
+        switch (job->status) {
+            
+            case COMPLETED:
+                printf("%-15s","Hecho");
+                break;
+                
+            case STOPPED:
+                printf("%-15s","Detenido");
+                break;
+                
+            case RUNNING:
+                printf("%-15s","En ejecución");
+                break;
+                
+            case SIGNALED:
+                printf("%-15s","Signaled");
+                break;
+                
+            case READY:
+                printf("%-15s","Ready");
+                
+        }
     
     printf("\t%s ", job->command);
     
@@ -89,8 +98,9 @@ void cleanInnerJobs(Job * j) {
     // Actualizamos los trabajos internos si hay más de uno.
     for (i = 0; i < j->total && j->total > 1; i++)
 
-        if (is_job_n_completed(j, i, NULL))
+        if (is_job_n_completed(j, i, NULL)) {
             remove_job_n(&shell.jobs, j->gpid, i);
+        }
 
     if (total != j->total)
         reenumerate_job(j);
@@ -155,12 +165,14 @@ void updateJobs(int sig) {
         
         if (j->total > 1)
             cleanInnerJobs(j);
+        if (j->respawnable && j->status == COMPLETED) 
+            printf("Respawned!!");
+            //respawnd_job(j);
         
         analyce_job_status(j);
         j->notify = ((j->status == STOPPED && j->type == RR_JOB) || IS_JOB_ENDED(j->status)) && 
-                    !j->foreground;
+                    !j->foreground && !j->respawnable;
         j = j->next;
-        
     }
     
 }
@@ -281,7 +293,14 @@ void put_job_background(Job * job) {
         kill(- job->gpid, SIGCONT);
     }
     
-    print_info("Background job ... pid : %d, command : %s\n", job->gpid, job->command);
+    analyce_job_status(job);
+    
+    if (!job->respawnable) {
+        print_info("Background job ... pid : %d, command : %s\n", job->gpid, job->command);
+    }
+    else {
+        print_info("Respawnable job ... pid : %d, command : %s\n", job->gpid, job->command);
+    }
 }
 
 void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foreground) {
@@ -340,7 +359,6 @@ void launch_forked_job(Job * job) {
         put_job_foreground(job);
     else
         put_job_background(job);
-    
 }
 
 /**
@@ -379,7 +397,10 @@ void launch_job(Job * job) {
         job->gpid = -1;
         internalCommands.handler[index](job->proc);
         block_sig(SIGCHLD);
-        if (index ==  cmd_rr) remove_job(&shell.jobs, -1);
+        
+        if (index ==  cmd_rr) 
+            remove_job(&shell.jobs, -1);
+        
         unblock_sig(SIGCHLD);
     }
     else
@@ -508,12 +529,14 @@ void cmd_fg_handler(Process * p) {
     
     fg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_fg]);
 
-    if (fg_job)
+    if (fg_job) {
+        fg_job->respawnable = 0;
         
         if (fg_job->type == NORMAL_JOB)
             put_job_foreground(fg_job);
         else 
             printf("Un trabajo round robin, no se puede traer a foreground.\n");
+    }
     
 }
 
@@ -522,12 +545,14 @@ void cmd_bg_handler(Process * p) {
     
     bg_job = check_fg_bg_command_line(p,internalCommands.str_cmd[cmd_bg]);
 
-    if (bg_job)
+    if (bg_job) {
+        bg_job->respawnable = 0;
         
         if (bg_job->status != RUNNING)
             put_job_background(bg_job);
         else
             printf("El trabajo ya está en ejecución.\n");
+    }
 }
 
 void cmd_jobs_handler(Process * p) {
@@ -553,14 +578,13 @@ void notify_and_clean_jobs() {
     Job * job = shell.jobs;
     int i = 1;
     
+    block_sig(SIGCHLD);
     printf(C_GREEN);
-    while (job) {
+    while (job && shell.jobs) {
         
         if (!job->foreground && IS_JOB_ENDED(job->status)) {
             print_job_state(i,job);
-            block_sig(SIGCHLD);
             remove_job(&shell.jobs, job->gpid);
-            unblock_sig(SIGCHLD);
         }
         else if (job->notify) {
             print_job_state(i, job);
@@ -573,6 +597,7 @@ void notify_and_clean_jobs() {
         job = job->next;
     }
     printf(C_DEFAULT);fflush(stdout);
+    unblock_sig(SIGCHLD);
     
 }
 

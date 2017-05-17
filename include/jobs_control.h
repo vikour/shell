@@ -44,6 +44,7 @@ struct T_Job {
     int active;
     int total;
     TypeJob type;
+    char respawnable;
     Process * proc;                   // Lista de procesos del trabajo.
     struct T_Job * next;              // Siguiente trabajo.
 };
