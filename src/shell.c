@@ -213,9 +213,10 @@ void put_job_background(Job * job) {
     print_info("Background job ... pid : %d, command : %s\n", job->gpid, job->command);
 }
 
-void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foreground) {
+void launch_process(Process * p, int infile, int outfile, pid_t gpid, char foreground) {
     pid_t pid;
     int icmd;
+    int value_exit;
     
     pid = getpid();
     
@@ -227,6 +228,13 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
     if (foreground)
         tcsetpgrp(shell.fdin, gpid);
     
+    // configuración de la entrada.
+    if (infile != shell.fdin)
+        dup2(STDIN_FILENO, infile);
+    
+    if (outfile != STDOUT_FILENO)
+        dup2(STDOUT_FILENO, outfile);
+    
     signal(SIGCHLD, SIG_DFL);
     control_signals(SIG_DFL);
     
@@ -236,13 +244,20 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
         execvp(p->args[0], p->args);
         putchar('\n');
         print_error("Error comando no enonctrado, commando : %s\n", p->args[0]);
-        exit(errno);
+        value_exit = errno;
     } // Si es interno, se ejecuta el manejador.
     else {
         ICMD_HANDLER(icmd)(p);
-        exit(0);
+        value_exit = 0;
     }
     
+    if (infile != shell.fdin)
+        close(infile);
+    
+    if (outfile != STDOUT_FILENO)
+        close(outfile);
+    
+    exit(value_exit);
 }
 
 void launch_forked_job(Job * job) {
@@ -277,6 +292,12 @@ void launch_forked_job(Job * job) {
         }
         
         // configuracion de la entrada.
+        if (infile != shell.fdin)
+            close(infile);
+        
+        if (outfile != STDOUT_FILENO)
+            close(outfile);
+        
         infile = fdp[0];
         
         p = p->next;
