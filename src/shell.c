@@ -157,7 +157,8 @@ void updateJobs(int sig) {
             cleanInnerJobs(j);
         
         analyce_job_status(j);
-        j->notify = (j->status == STOPPED || IS_JOB_ENDED(j->status)) && !j->foreground;
+        j->notify = ((j->status == STOPPED && j->type == RR_JOB) || IS_JOB_ENDED(j->status)) && 
+                    !j->foreground;
         j = j->next;
         
     }
