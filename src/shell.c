@@ -228,15 +228,19 @@ void launch_process(Process * p, int infile, int outfile, pid_t gpid, char foreg
     if (foreground)
         tcsetpgrp(shell.fdin, gpid);
     
-    // configuración de la entrada.
-    if (infile != shell.fdin)
-        dup2(infile, shell.fdin);
-    
-    if (outfile != STDOUT_FILENO)
-        dup2(outfile, STDOUT_FILENO);
-    
     signal(SIGCHLD, SIG_DFL);
     control_signals(SIG_DFL);
+    
+    // configuración de la entrada.
+    if (infile != shell.fdin) {
+       dup2(infile, shell.fdin);
+       close(infile);
+    }
+    
+    if (outfile != STDOUT_FILENO) {
+        dup2(outfile, STDOUT_FILENO);
+        close(outfile);
+    }
     
     icmd = indexOfInternalProcess(p);
     
@@ -250,12 +254,6 @@ void launch_process(Process * p, int infile, int outfile, pid_t gpid, char foreg
         ICMD_HANDLER(icmd)(p);
         value_exit = 0;
     }
-    
-    if (infile != shell.fdin)
-        close(infile);
-    
-    if (outfile != STDOUT_FILENO)
-        close(outfile);
     
     exit(value_exit);
 }
@@ -272,13 +270,18 @@ void launch_forked_job(Job * job) {
         p->pid = fork(); 
         
         // Configuración de pipes.
-        if ( pipe(fdp) < 0) {
-            print_error("Error al crear la tubería.");
-            exit(1);
-        }
-        else {
-            outfile = fdp[1];
-        }
+        if (p->next) 
+            if ( pipe(fdp) < 0) {
+                print_error("Error al crear la tubería.");
+                exit(1);
+            }
+            else {
+                outfile = fdp[1];
+            }
+        else
+            outfile = STDOUT_FILENO;
+        
+        printf("p : %s\n, salida : %d ", p->args[0], outfile);
         
         if (p->pid == 0) 
             launch_process(p, infile, outfile,job->gpid,job->foreground);
@@ -299,6 +302,7 @@ void launch_forked_job(Job * job) {
             close(outfile);
         
         infile = fdp[0];
+        printf("\n entrada : %d\n", infile);
         
         p = p->next;
     }
