@@ -32,28 +32,32 @@ void print_job_state(int number, Job * job) {
     
     printf("[%d]\t", number);
 
-    switch (job->status) {
-
-        case COMPLETED:
-            printf("%-15s","Hecho");
-            break;
-
-        case STOPPED:
-            printf("%-15s","Detenido");
-            break;
-
-        case RUNNING:
-            printf("%-15s","En ejecución");
-            break;
-
-        case SIGNALED:
-            printf("%-15s","Signaled");
-            break;
-
-        case READY:
-            printf("%-15s","Ready");
+    
+    if (job->respawnable) 
+        printf("%-15s","Respawnable");
+    else
+        switch (job->status) {
             
-    }
+            case COMPLETED:
+                printf("%-15s","Hecho");
+                break;
+                
+            case STOPPED:
+                printf("%-15s","Detenido");
+                break;
+                
+            case RUNNING:
+                printf("%-15s","En ejecución");
+                break;
+                
+            case SIGNALED:
+                printf("%-15s","Signaled");
+                break;
+                
+            case READY:
+                printf("%-15s","Ready");
+                
+        }
     
     printf("\t%s\n", job->command);
 }
@@ -238,7 +242,13 @@ void put_job_background(Job * job) {
     }
     
     analyce_job_status(job);
-    print_info("Background job ... pid : %d, command : %s\n", job->gpid, job->command);
+    
+    if (!job->respawnable) {
+        print_info("Background job ... pid : %d, command : %s\n", job->gpid, job->command);
+    }
+    else {
+        print_info("Respawnable job ... pid : %d, command : %s\n", job->gpid, job->command);
+    }
 }
 
 void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foreground) {
@@ -276,7 +286,6 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
 void launch_forked_job(Job * job) {
     Process * p = job->proc;
     
-    printf("respawnable : %d\n", job->respawnable);
     while (p) {
         p->pid = fork(); 
         
