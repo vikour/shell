@@ -165,6 +165,7 @@ Job * create_job(ListJobs * list_jobs, const char * cmd) {
     (*curr)->active = 0;
     (*curr)->type = NORMAL_JOB;
     (*curr)->respawnable = 0;
+    (*curr)->time_out = 0;
     prepare_job(*curr);
 
     return *curr;

@@ -46,6 +46,7 @@ struct T_Job {
     TypeJob type;
     char respawnable;
     Process * proc;                   // Lista de procesos del trabajo.
+    int time_out;                     // Indica si tiene time out asignado.
     struct T_Job * next;              // Siguiente trabajo.
 };
 

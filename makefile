@@ -1,7 +1,7 @@
 CC=gcc
 DEBUG=-g
 CFLAGS=-I include -c
-LDFLAGS=
+LDFLAGS=-lpthread
 RUNNER=bin/shell
 OBJECTS=build/shell.o build/inputModule.o build/history.o build/jobs_control.o
 

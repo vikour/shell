@@ -36,5 +36,6 @@
 #define CMDCD   "cd"
 #define CMDRR   "rr"
 #define CMDHIST "historial"
+#define CMDTOUT "time-out"
 
 #endif

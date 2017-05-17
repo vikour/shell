@@ -16,6 +16,10 @@
 #include <sys/types.h>
 #include <wait.h>
 #include <sysexits.h>
+#include <ctype.h>
+#include <pthread.h>
+
+void * thread_time_out(void *);
 
 void launch_job(Job * job);
 
@@ -348,6 +352,7 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
 
 void launch_forked_job(Job * job) {
     Process * p = job->proc;
+    pthread_t tid;
     
     while (p) {
         p->pid = fork(); 
@@ -365,6 +370,9 @@ void launch_forked_job(Job * job) {
         
         p = p->next;
     }
+    
+    if (job->time_out != 0) 
+        pthread_create(&tid,NULL, thread_time_out,job);
     
     if (job->foreground)
         put_job_foreground(job);
@@ -606,6 +614,45 @@ void cmd_jobs_handler(Process * p) {
     
 }
 
+void cmd_error_timeout(){
+        print_error("Error al usar time-out...\n"
+                    "\tUsa: time-out <tiempo> <comando>\n");
+}
+
+void * thread_time_out(void * attr) {
+    Job * job = (Job * ) attr;
+    
+    block_sig(SIGCHLD);
+    
+    if (job->time_out > 0)
+        sleep(job->time_out);
+    
+    if ( waitpid(-job->gpid,NULL, WNOHANG) >= 0)
+        kill(-job->gpid, SIGKILL);
+}
+
+void cmd_timeout_handler(Process * p) {
+    int i;
+    Job * job = search_job_by_process(shell.jobs,p->pid);
+    
+    if (p->argc < 3 )  {
+        cmd_error_timeout();
+        return;
+    }
+    
+    job->time_out = atoi(p->args[1]);
+    
+    if (job->time_out == 0)
+        job->time_out = -1;
+    
+    // Eliminamos del proceso time-out y el tiempo
+    free(p->args[0]); free(p->args[1]);
+    for (i = 0 ; i < p->argc - 1; i++)
+        p->args[i] = p->args[i+2];
+    
+    launch_job(job);
+}
+
 void notify_and_clean_jobs() {
     Job * job = shell.jobs;
     int i = 1;
@@ -647,6 +694,7 @@ void config_internal_commands() {
     LINK_CMD(cmd_exit, cmd_exit_handler);
     LINK_CMD(cmd_rr, cmd_rr_handler);
     LINK_CMD(cmd_hist, cmd_hist_handler);
+    LINK_CMD(cmd_timeout, cmd_timeout_handler);
 }
 
 // ---------------------------------------------------------------------------//
