@@ -247,12 +247,26 @@ void launch_process(Process * p, int fdin, int fdout, pid_t gpid, char foregroun
 
 void launch_forked_job(Job * job) {
     Process * p = job->proc;
+    int fdp[2];
+    int outfile, infile;
+    
+    outfile = STDOUT_FILENO;
+    infile  = shell.fdin;
     
     while (p) {
         p->pid = fork(); 
         
+        // Configuración de pipes.
+        if ( pipe(fdp) < 0) {
+            print_error("Error al crear la tubería.");
+            exit(1);
+        }
+        else {
+            outfile = fdp[1];
+        }
+        
         if (p->pid == 0) 
-            launch_process(p, shell.fdin, STDOUT_FILENO,job->gpid,job->foreground);
+            launch_process(p, infile, outfile,job->gpid,job->foreground);
         else {
             
             if (job->gpid == 0)
@@ -261,6 +275,9 @@ void launch_forked_job(Job * job) {
             setpgid(p->pid, job->gpid);
             mark_process(job,0,p->pid);
         }
+        
+        // configuracion de la entrada.
+        infile = fdp[0];
         
         p = p->next;
     }
