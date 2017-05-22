@@ -29,13 +29,14 @@
 #define C_DEFAULT   C_BLACK
 
 // Comandos de terminal.
-#define CMDEXIT "exit"
-#define CMDJOBS "jobs"
-#define CMDFG   "fg"
-#define CMDBG   "bg"
-#define CMDCD   "cd"
-#define CMDRR   "rr"
-#define CMDHIST "historial"
-#define CMDTOUT "time-out"
+#define CMDEXIT  "exit"
+#define CMDJOBS  "jobs"
+#define CMDFG    "fg"
+#define CMDBG    "bg"
+#define CMDCD    "cd"
+#define CMDRR    "rr"
+#define CMDHIST  "historial"
+#define CMDTOUT  "time-out"
+#define CMDCHILD "children"
 
 #endif

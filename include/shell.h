@@ -28,6 +28,14 @@ struct T_Shell {
 
 typedef struct T_Shell Shell;
 
+typedef struct {
+    pid_t pid;
+    int threads;
+    int childs;
+} InfoProcess;
+
+typedef InfoProcess * ListChildren;
+
 // trabajos internos de la terminal.
 typedef struct {
     int count;
@@ -39,14 +47,15 @@ typedef struct {
 // Configuración del nómbre del comando, y su cadena asociada.
 // CMD(enum_name, str_name, 1 if forked)
 #define INTERNAL_COMMAND  \
-   CMD(cmd_exit,    CMDEXIT,  0) \
-   CMD(cmd_fg,      CMDFG,    0) \
-   CMD(cmd_bg,      CMDBG,    0) \
-   CMD(cmd_jobs,    CMDJOBS,  1) \
-   CMD(cmd_cd,      CMDCD,    0) \
-   CMD(cmd_rr,      CMDRR,    0) \
-   CMD(cmd_hist,    CMDHIST,  1) \
-   CMD(cmd_timeout, CMDTOUT,  0) 
+   CMD(cmd_exit,    CMDEXIT,   0) \
+   CMD(cmd_fg,      CMDFG,     0) \
+   CMD(cmd_bg,      CMDBG,     0) \
+   CMD(cmd_jobs,    CMDJOBS,   1) \
+   CMD(cmd_cd,      CMDCD,     0) \
+   CMD(cmd_rr,      CMDRR,     0) \
+   CMD(cmd_hist,    CMDHIST,   1) \
+   CMD(cmd_timeout, CMDTOUT,   0) \
+   CMD(cmd_children, CMDCHILD, 1)
 
 // Creación de la enumeración
 enum internal_command_names {

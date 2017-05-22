@@ -18,6 +18,7 @@
 #include <sysexits.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <dirent.h>
 
 void * thread_time_out(void *);
 
@@ -732,6 +733,29 @@ void cmd_exit_handler() {
     exit(0);
 }
 
+ListChildren * build_list() {
+    struct dirent * pDirent;;
+    DIR * pDir;
+    ListChildren * list = NULL;
+    FILE * fich;
+    char buff[100];
+    
+    pDir = opendir("/proc");
+    
+    while ( (pDirent = readdir(pDir)) != NULL) {
+        printf("[%s]\n", pDirent->d_name);
+        strcat(strcat(strcpy(buff, "/proc/"), pDirent->d_name), "/");
+        printf("\t%s\n", buff);
+    }
+    
+}
+
+void cmd_children_handler() {
+    ListChildren * list;
+    
+    list = build_list();
+}
+
 void config_internal_commands() {
     LINK_CMD(cmd_cd, cmd_cd_handler);
     LINK_CMD(cmd_fg, cmd_fg_handler);
@@ -741,6 +765,7 @@ void config_internal_commands() {
     LINK_CMD(cmd_rr, cmd_rr_handler);
     LINK_CMD(cmd_hist, cmd_hist_handler);
     LINK_CMD(cmd_timeout, cmd_timeout_handler);
+    LINK_CMD(cmd_children, cmd_children_handler);
 }
 
 // ---------------------------------------------------------------------------//
