@@ -163,6 +163,7 @@ void updateJobs(int sig) {
     int status, total, i;
     pid_t pid;
     Process * p;
+    char updated = 0;
 
     while (j) {
         p = j->proc;
@@ -171,8 +172,11 @@ void updateJobs(int sig) {
 
             pid = waitpid(p->pid, &status, WNOHANG | WUNTRACED | WCONTINUED);
             
-            if (pid > 0) 
+            if (pid > 0) {
                 mark_process(j, status, pid);
+                analyce_job_status(j);
+                updated = 1;
+            }
             
             p = p->next;
         }
@@ -180,14 +184,16 @@ void updateJobs(int sig) {
         if (j->total > 1)
             cleanInnerJobs(j);
         
-        analyce_job_status(j);
-        
-        
-        if (j->respawnable && j->status == COMPLETED) 
-            respawnd_job(j);
-        
-        j->notify = ((j->status == STOPPED && j->type != RR_JOB) || IS_JOB_ENDED(j->status)) && 
+        if (updated) {
+            
+            if (j->respawnable && j->status == COMPLETED) 
+                respawnd_job(j);
+            
+            j->notify = ((j->status == STOPPED && j->type != RR_JOB) || IS_JOB_ENDED(j->status)) && 
                     !j->foreground && !j->respawnable;
+            
+        }
+        
         j = j->next;
     }
     
@@ -604,7 +610,7 @@ void cmd_fg_handler(Process * p) {
     if (fg_job) {
         
         if (fg_job->respawnable) {
-            printf("\"%s\" ya no es respawnable\n");
+            printf("\"%s\" ya no es respawnable\n", fg_job->command);
             fg_job->respawnable = 0;
         }
         
@@ -624,7 +630,7 @@ void cmd_bg_handler(Process * p) {
     if (bg_job) {
         
         if (bg_job->respawnable) {
-            printf("\"%s\" ya no es respawnable\n");
+            printf("\"%s\" ya no es respawnable\n", bg_job->command);
             bg_job->respawnable = 0;
         }
         
@@ -668,7 +674,7 @@ void * thread_time_out(void * attr) {
         sleep(job->time_out);
     
     if ( waitpid(-job->gpid,NULL, WNOHANG) >= 0)
-        kill(-job->gpid, SIGKILL);
+        kill(-job->gpid, SIGTERM);
 }
 
 void cmd_timeout_handler(Process * p) {
