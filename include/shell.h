@@ -28,12 +28,16 @@ struct T_Shell {
 
 typedef struct T_Shell Shell;
 
-typedef struct {
+struct __InfoProcess {
     pid_t pid;
-    int threads;
+    pid_t ppid;
+    long threads;
     int childs;
-} InfoProcess;
+    char comm[100];
+    struct __InfoProcess * next;
+};
 
+typedef struct __InfoProcess InfoProcess;
 typedef InfoProcess * ListChildren;
 
 // trabajos internos de la terminal.

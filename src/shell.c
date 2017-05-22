@@ -733,27 +733,79 @@ void cmd_exit_handler() {
     exit(0);
 }
 
-ListChildren * build_list() {
-    struct dirent * pDirent;;
-    DIR * pDir;
-    ListChildren * list = NULL;
-    FILE * fich;
-    char buff[100];
+void chidlren_inc_list(ListChildren list, pid_t pid) {
+    char updated = 0;
     
-    pDir = opendir("/proc");
-    
-    while ( (pDirent = readdir(pDir)) != NULL) {
-        printf("[%s]\n", pDirent->d_name);
-        strcat(strcat(strcpy(buff, "/proc/"), pDirent->d_name), "/");
-        printf("\t%s\n", buff);
+    while (list && !updated && pid != 0) {
+        
+        if (list->pid == pid) {
+            list->childs++;
+            updated++;
+        }
+        
+        list = list->next;
     }
     
 }
 
 void cmd_children_handler() {
-    ListChildren * list;
+    ListChildren list = NULL;
+    ListChildren * mlist = &list;
+    DIR * dp;
+    struct dirent * entry;
+    FILE * fstat;
+    char buff[50];
+    int ti;
+    long ll;
+    double ld;
     
-    list = build_list();
+    if ( ! (dp = opendir("/proc")) ) {
+        print_error("No se pudo habrír el directorio /proc\n");
+        exit(errno);
+    }
+    
+    chdir("/proc");
+    
+    while ( (entry = readdir(dp)) ) {
+        
+        if (entry->d_type == DT_DIR && isdigit(entry->d_name[0])) {
+            *mlist = (InfoProcess *) malloc(sizeof(InfoProcess));
+            (*mlist)->childs = 0;
+            
+            chdir(entry->d_name);
+            fstat = fopen("stat","r");
+            fscanf(fstat,"%d",&((*mlist)->pid)); // pid
+            fscanf(fstat,"%s %c", (*mlist)->comm, &buff[0]); // comn ,status
+            fscanf(fstat,"%d",&((*mlist)->ppid)); // ppid
+            fscanf(fstat, "%d %d %d %d %u %lu %lu %lu %lu %lu %lu %ld %ld %ld %ld",
+                   &ti,&ti,&ti,&ti,&ti,&ll,&ll,&ll,&ll,&ll,&ll,&ll,&ll,&ll,&ll);
+            fscanf(fstat, "%ld", &((*mlist)->threads));
+            fclose(fstat);
+            chdir("..");
+            mlist = &((*mlist)->next);
+        }
+        
+    }
+    
+    for (mlist = &list ; *mlist ; mlist = &((*mlist)->next)) 
+        chidlren_inc_list(list, (*mlist)->ppid);    
+
+    printf(" %-6s %-18s %-6s %-6s\n", "PID", "COMMAND", "CHILDREN", "THREADS");
+    for (mlist = &list ; *mlist ; mlist = &((*mlist)->next)) 
+        printf(" %-6d %-18s %6d %6d\n", (*mlist)->pid, (*mlist)->comm,
+                (*mlist)->childs, (*mlist)->threads);
+    
+    // destroy list.
+    mlist = &list;
+    
+    while (list) {
+        list = list->next;
+        free(*mlist);
+        mlist = &list;
+    }
+    
+    closedir(dp);
+    
 }
 
 void config_internal_commands() {
