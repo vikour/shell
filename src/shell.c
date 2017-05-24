@@ -375,14 +375,16 @@ void launch_forked_job(Job * job) {
     pthread_t tid;
     int fdp[2];
     int outfile, infile;
+    FILE * fich;
     
     outfile = STDOUT_FILENO;
     infile  = shell.fdin;
     
     while (p) {
         
-        // Configuración de pipes.
+        // Configuración de pipes y ficheros.
         if (p->next) 
+            
             if ( pipe(fdp) < 0) {
                 print_error("Error al crear la tubería.");
                 exit(1);
@@ -390,14 +392,36 @@ void launch_forked_job(Job * job) {
             else {
                 outfile = fdp[1];
             }
+        
         else
             outfile = STDOUT_FILENO;
         
         p->pid = fork(); 
         
-        if (p->pid == 0) 
+        if (p->pid == 0)  { // Hijo
+            
+            if (p->argc > 2 && *(p->args[p->argc-2]) == '>') {
+                
+                if (outfile != STDOUT_FILENO)
+                    close(outfile);
+                
+                if ( (fich = fopen(p->args[p->argc-1], "w")) ) {
+                    outfile = fileno(fich);
+                    free(p->args[p->argc - 1]);
+                    free(p->args[p->argc - 2]);
+                    p->args[p->argc - 2] = NULL;
+                    p->argc -= 2;
+                }
+                else {
+                    print_errno("fopen");
+                    exit(errno);
+                }
+                
+            }
+            
             launch_process(p, infile, outfile,job->gpid,job->foreground);
-        else {
+        }
+        else {  // Padre
             
             if (job->gpid <= 0)
                 job->gpid = p->pid;
@@ -696,6 +720,7 @@ void cmd_timeout_handler(Process * p) {
     free(p->args[0]); free(p->args[1]);
     for (i = 0 ; i < p->argc - 1; i++)
         p->args[i] = p->args[i+2];
+    p->argc -= 2;
     
     launch_job(job);
 }
@@ -776,6 +801,8 @@ void cmd_children_handler() {
             fstat = fopen("stat","r");
             fscanf(fstat,"%d",&((*mlist)->pid)); // pid
             fscanf(fstat,"%s %c", (*mlist)->comm, &buff[0]); // comn ,status
+            *((*mlist)->comm) = ' ';
+            (*mlist)->comm[strlen((*mlist)->comm) - 1] = ' ';
             fscanf(fstat,"%d",&((*mlist)->ppid)); // ppid
             fscanf(fstat, "%d %d %d %d %u %lu %lu %lu %lu %lu %lu %ld %ld %ld %ld",
                    &ti,&ti,&ti,&ti,&ti,&ll,&ll,&ll,&ll,&ll,&ll,&ll,&ll,&ll,&ll);
@@ -792,7 +819,7 @@ void cmd_children_handler() {
 
     printf(" %-6s %-18s %-6s %-6s\n", "PID", "COMMAND", "CHILDREN", "THREADS");
     for (mlist = &list ; *mlist ; mlist = &((*mlist)->next)) 
-        printf(" %-6d %-18s %6d %6d\n", (*mlist)->pid, (*mlist)->comm,
+        printf(" %-6d %-18s %6d %6ld\n", (*mlist)->pid, (*mlist)->comm,
                 (*mlist)->childs, (*mlist)->threads);
     
     // destroy list.
@@ -824,7 +851,7 @@ void config_internal_commands() {
 // ---------------------------------- MAIN------------------------------------//
 // ---------------------------------------------------------------------------//
 
-int main() {
+int main(int argc, char ** argv) {
     char * cmd;
     Job * job;
 
